@@ -13,20 +13,6 @@
 #define RST 23
 #define MISO 19
 
-// registers from
-// https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf
-#define REG_FIFO 0x00
-#define REG_OP_MODE 0x01
-#define REG_FIFO_ADDR_PTR 0x0D
-#define REG_FIFO_TX_BASE 0x0E
-#define REG_FIFO_RX_BASE 0x0F
-#define REG_IRQ_FLAGS 0x12
-#define REG_RX_NB_BYTES 0x13
-#define REG_PKT_SNR 0x19
-#define REG_PKT_RSSI 0x1A
-#define REG_PAYLOAD_LENGTH 0x22
-#define REG_VERSION 0x42
-
 void lora_reset() {
   gpio_set_level(RST, 0);
   vTaskDelay(pdMS_TO_TICKS(10));
@@ -94,7 +80,7 @@ spi_device_handle_t lora_init() {
   lora_reset();
 
   // LoRa mode
-  lora_write_reg(handle, REG_OP_MODE, 0x80);
+  lora_write_reg(handle, REG_LR_OPMODE, 0x80);
 
   // frequency (915MHz example)
   lora_write_reg(handle, REG_LR_FRFMSB, 0xE4);
@@ -102,9 +88,9 @@ spi_device_handle_t lora_init() {
   lora_write_reg(handle, REG_LR_FRFLSB, 0x00);
 
   // standby
-  lora_write_reg(handle, REG_OP_MODE, 0x81);
+  lora_write_reg(handle, REG_LR_OPMODE, 0x81);
 
-  uint8_t v = lora_read_reg(handle, REG_VERSION);
+  uint8_t v = lora_read_reg(handle, REG_LR_VERSION);
   assert(v == 0x12 || v == 0x11);
   return handle;
 }
