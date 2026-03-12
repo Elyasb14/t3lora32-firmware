@@ -2,6 +2,7 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 #include <freertos/task.h>
+#include <stdint.h>
 
 #define MOSI 27
 #define SCLK 5
@@ -103,4 +104,12 @@ spi_device_handle_t lora_init() {
 
   // standby
   lora_write_reg(0x01, 0x81);
+}
+
+uint32_t lora_get_freq(spi_device_handle_t handle) {
+  uint32_t frf = (lora_read_reg(handle, 0x06) << 16) |
+                 (lora_read_reg(handle, 0x07) << 8) |
+                 (lora_read_reg(handle, 0x08));
+
+  return frf * 61.03515625 / 1e6;
 }
