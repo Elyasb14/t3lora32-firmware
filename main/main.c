@@ -17,10 +17,10 @@ void app_main() {
 
   spi_device_handle_t lora_handle = lora_init();
 
-  uint32_t frf = lora_get_freq(lora_handle);
+  float frf = lora_get_freq(lora_handle);
 
   char freq_str[16];
-  snprintf(freq_str, sizeof(freq_str), "%.3f MHz", (double)frf);
+  snprintf(freq_str, sizeof(freq_str), "%.3f MHz", frf);
 
   oled_draw_string(dev_handle, freq_str, 0, 7);
 }

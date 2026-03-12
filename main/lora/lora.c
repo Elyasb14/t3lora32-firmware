@@ -109,10 +109,10 @@ spi_device_handle_t lora_init() {
   return handle;
 }
 
-uint32_t lora_get_freq(spi_device_handle_t handle) {
+float lora_get_freq(spi_device_handle_t handle) {
   uint32_t frf = (lora_read_reg(handle, 0x06) << 16) |
                  (lora_read_reg(handle, 0x07) << 8) |
                  (lora_read_reg(handle, 0x08));
 
-  return frf * 61.03515625 / 1e6;
+  return (float)frf * 61.03515625 / 1e6;
 }
