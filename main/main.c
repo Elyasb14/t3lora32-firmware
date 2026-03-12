@@ -19,7 +19,7 @@ void app_main() {
 
   uint32_t frf = lora_get_freq(lora_handle);
 
-  char freq_str[16]; // buffer for string
+  char freq_str[16];
   snprintf(freq_str, sizeof(freq_str), "%.3f MHz", (double)frf);
 
   oled_draw_string(dev_handle, freq_str, 0, 7);
