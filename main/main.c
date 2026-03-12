@@ -13,6 +13,6 @@ void app_main() {
   i2c_master_dev_handle_t dev_handle = i2c_init();
   oled_init(dev_handle);
   oled_draw_string(dev_handle, "hello", 0, 7);
-
   spi_device_handle_t handle = lora_init();
+  lora_print_freq(handle);
 }

@@ -92,9 +92,6 @@ spi_device_handle_t lora_init() {
   spi_device_handle_t handle = _lora_spi_init();
   lora_reset();
 
-  // sleep
-  lora_write_reg(handle, REG_OP_MODE, 0x00);
-
   // LoRa mode
   lora_write_reg(handle, REG_OP_MODE, 0x80);
 
@@ -109,4 +106,12 @@ spi_device_handle_t lora_init() {
   uint8_t v = lora_read_reg(handle, REG_VERSION);
   assert(v == 0x12 || v == 0x11);
   return handle;
+}
+
+void lora_print_freq(spi_device_handle_t handle) {
+  uint32_t frf = (lora_read_reg(handle, 0x06) << 16) |
+                 (lora_read_reg(handle, 0x07) << 8) |
+                 (lora_read_reg(handle, 0x08));
+
+  printf("Freq: %.3f MHz\n", frf * 61.03515625 / 1e6);
 }
