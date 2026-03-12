@@ -2,6 +2,7 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 #include "sx1276_regs_lora.h"
+#include <assert.h>
 #include <freertos/task.h>
 
 #define MOSI 27
@@ -105,5 +106,7 @@ spi_device_handle_t lora_init() {
   // standby
   lora_write_reg(handle, REG_OP_MODE, 0x81);
 
+  uint8_t v = lora_read_reg(handle, REG_VERSION);
+  assert(v == 0x12 || v == 0x11);
   return handle;
 }
