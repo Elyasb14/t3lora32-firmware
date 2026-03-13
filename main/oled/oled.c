@@ -8,103 +8,102 @@
 
 // send single command byte
 void oled_send_cmd(i2c_master_dev_handle_t handle, uint8_t cmd) {
-  uint8_t buf[2] = {0x00, cmd};
-  ESP_ERROR_CHECK(i2c_master_transmit(handle, buf, 2, 1000));
+    uint8_t buf[2] = {0x00, cmd};
+    ESP_ERROR_CHECK(i2c_master_transmit(handle, buf, 2, 1000));
 }
 
 // send multiple data bytes
 void oled_send_data(i2c_master_dev_handle_t handle, uint8_t *data, size_t len) {
-  uint8_t buf[len + 1];
-  buf[0] = 0x40; // data control byte
-  memcpy(buf + 1, data, len);
-  ESP_ERROR_CHECK(i2c_master_transmit(handle, buf, len + 1, 1000));
+    uint8_t buf[len + 1];
+    buf[0] = 0x40; // data control byte
+    memcpy(buf + 1, data, len);
+    ESP_ERROR_CHECK(i2c_master_transmit(handle, buf, len + 1, 1000));
 }
 
 // slear the display (all pixels off)
 void oled_clear_display(i2c_master_dev_handle_t handle) {
-  uint8_t empty[128];
-  memset(empty, 0x00, sizeof(empty));
+    uint8_t empty[128];
+    memset(empty, 0x00, sizeof(empty));
 
-  for (int page = 0; page < 8; page++) {
-    oled_send_cmd(handle, 0xB0 + page); // Set page address
-    oled_send_cmd(handle, 0x00);        // Set column lower address
-    oled_send_cmd(handle, 0x10);        // Set column higher address
-    oled_send_data(handle, empty, sizeof(empty));
-  }
+    for (int page = 0; page < 8; page++) {
+        oled_send_cmd(handle, 0xB0 + page); // Set page address
+        oled_send_cmd(handle, 0x00);        // Set column lower address
+        oled_send_cmd(handle, 0x10);        // Set column higher address
+        oled_send_data(handle, empty, sizeof(empty));
+    }
 }
 
 // initialize SSD1306
 void oled_init(i2c_master_dev_handle_t handle) {
-  oled_send_cmd(handle, 0xAE); // Display OFF
-  oled_send_cmd(handle, 0xD5); // Set Display Clock Divide Ratio
-  oled_send_cmd(handle, 0x80); // Suggested value
-  oled_send_cmd(handle, 0xA8); // Set Multiplex Ratio
-  oled_send_cmd(handle, 0x3F); // 1/64 duty (64 rows)
-  oled_send_cmd(handle, 0xD3); // Set Display Offset
-  oled_send_cmd(handle, 0x00); // No offset
-  oled_send_cmd(handle, 0x40); // Set Display Start Line to 0
-  oled_send_cmd(handle, 0x8D); // Set Charge Pump
-  oled_send_cmd(handle, 0x14); // Enable Charge Pump
-  oled_send_cmd(handle, 0xA1); // Set Segment Re-map (column 127 to SEG0)
-  oled_send_cmd(handle, 0xC8); // Set COM Output Scan Direction (remapped mode)
-  oled_send_cmd(handle, 0xDA); // Set COM Pins Hardware Configuration
-  oled_send_cmd(handle, 0x12); // Alternative COM pin configuration
-  oled_send_cmd(handle, 0x81); // Set Contrast
-  oled_send_cmd(handle, 0xCF); // Contrast value
-  oled_send_cmd(handle, 0xD9); // Set Pre-charge Period
-  oled_send_cmd(handle, 0xF1); // Phase 1 & 2
-  oled_send_cmd(handle, 0xDB); // Set VCOMH Deselect Level
-  oled_send_cmd(handle, 0x40); // 0.77 * VCC
-  oled_send_cmd(handle, 0xA4); // Resume to RAM content display
-  oled_send_cmd(handle, 0xA6); // Set Normal Display (not inverted)
-  oled_send_cmd(handle, 0xAF); // Display ON
+    oled_send_cmd(handle, 0xAE); // Display OFF
+    oled_send_cmd(handle, 0xD5); // Set Display Clock Divide Ratio
+    oled_send_cmd(handle, 0x80); // Suggested value
+    oled_send_cmd(handle, 0xA8); // Set Multiplex Ratio
+    oled_send_cmd(handle, 0x3F); // 1/64 duty (64 rows)
+    oled_send_cmd(handle, 0xD3); // Set Display Offset
+    oled_send_cmd(handle, 0x00); // No offset
+    oled_send_cmd(handle, 0x40); // Set Display Start Line to 0
+    oled_send_cmd(handle, 0x8D); // Set Charge Pump
+    oled_send_cmd(handle, 0x14); // Enable Charge Pump
+    oled_send_cmd(handle, 0xA1); // Set Segment Re-map (column 127 to SEG0)
+    oled_send_cmd(handle,
+                  0xC8); // Set COM Output Scan Direction (remapped mode)
+    oled_send_cmd(handle, 0xDA); // Set COM Pins Hardware Configuration
+    oled_send_cmd(handle, 0x12); // Alternative COM pin configuration
+    oled_send_cmd(handle, 0x81); // Set Contrast
+    oled_send_cmd(handle, 0xCF); // Contrast value
+    oled_send_cmd(handle, 0xD9); // Set Pre-charge Period
+    oled_send_cmd(handle, 0xF1); // Phase 1 & 2
+    oled_send_cmd(handle, 0xDB); // Set VCOMH Deselect Level
+    oled_send_cmd(handle, 0x40); // 0.77 * VCC
+    oled_send_cmd(handle, 0xA4); // Resume to RAM content display
+    oled_send_cmd(handle, 0xA6); // Set Normal Display (not inverted)
+    oled_send_cmd(handle, 0xAF); // Display ON
 
-  // Use page addressing mode for consistency
-  oled_send_cmd(handle, 0x20); // Set addressing mode
-  oled_send_cmd(handle, 0x02); // Page addressing mode
-  oled_clear_display(handle);
+    // Use page addressing mode for consistency
+    oled_send_cmd(handle, 0x20); // Set addressing mode
+    oled_send_cmd(handle, 0x02); // Page addressing mode
+    oled_clear_display(handle);
 }
 
 // fill the entire display white
 void oled_fill_white(i2c_master_dev_handle_t handle) {
-  uint8_t white[128];
-  memset(white, 0xFF, sizeof(white));
+    uint8_t white[128];
+    memset(white, 0xFF, sizeof(white));
 
-  for (int page = 0; page < 8; page++) {
-    oled_send_cmd(handle, 0xB0 + page); // Set page address
-    oled_send_cmd(handle, 0x00);        // Set column lower address
-    oled_send_cmd(handle, 0x10);        // Set column higher address
-    oled_send_data(handle, white, sizeof(white));
-  }
+    for (int page = 0; page < 8; page++) {
+        oled_send_cmd(handle, 0xB0 + page); // Set page address
+        oled_send_cmd(handle, 0x00);        // Set column lower address
+        oled_send_cmd(handle, 0x10);        // Set column higher address
+        oled_send_data(handle, white, sizeof(white));
+    }
 }
 
 static const uint8_t font5x7[95][5];
 void oled_draw_char(i2c_master_dev_handle_t handle, char c, uint8_t col,
                     uint8_t page) {
-  if (c < 32 || c > 126)
-    return;
-  uint8_t buffer[5];
-  memcpy(buffer, font5x7[c - 32], 5);
+    if (c < 32 || c > 126) return;
+    uint8_t buffer[5];
+    memcpy(buffer, font5x7[c - 32], 5);
 
-  oled_send_cmd(handle, 0xB0 + page);         // page
-  oled_send_cmd(handle, 0x00 + (col & 0x0F)); // col low
-  oled_send_cmd(handle, 0x10 + (col >> 4));   // col high
-  oled_send_data(handle, buffer, 5);
+    oled_send_cmd(handle, 0xB0 + page);         // page
+    oled_send_cmd(handle, 0x00 + (col & 0x0F)); // col low
+    oled_send_cmd(handle, 0x10 + (col >> 4));   // col high
+    oled_send_data(handle, buffer, 5);
 }
 
 // page is row, it can be 0-7, it wraps so 8==0
 void oled_draw_string(i2c_master_dev_handle_t handle, const char *str,
                       uint8_t col, uint8_t page) {
-  while (*str) {
-    oled_draw_char(handle, *str++, col, page);
-    col += 6; // 5 pixels + 1 space
-    if (col > 127) {
-      col = 0;
-      page++;
-      if (page > 7)
-        page = 0;
+    while (*str) {
+        oled_draw_char(handle, *str++, col, page);
+        col += 6; // 5 pixels + 1 space
+        if (col > 127) {
+            col = 0;
+            page++;
+            if (page > 7) page = 0;
+        }
     }
-  }
 }
 
 // =================== 5x7 ASCII FONT ===================
