@@ -1,9 +1,11 @@
+#include "lora/lora.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_err.h"
 #include "sx1276_regs_lora.h"
 #include <assert.h>
 #include <freertos/task.h>
+#include <math.h>
 #include <stdint.h>
 
 #define MOSI 27
@@ -68,7 +70,8 @@ void lora_write_reg(spi_device_handle_t handle, uint8_t reg, uint8_t value) {
   spi_device_transmit(handle, &t);
 }
 
-spi_device_handle_t lora_init() {
+void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz);
+spi_device_handle_t lora_init(uint32_t freq_hz) {
   gpio_config_t io_conf = {
       .mode = GPIO_MODE_OUTPUT,
       .pin_bit_mask = (1ULL << RST),
@@ -82,10 +85,7 @@ spi_device_handle_t lora_init() {
   // LoRa mode
   lora_write_reg(handle, REG_LR_OPMODE, 0x80);
 
-  // frequency (915MHz example)
-  lora_write_reg(handle, REG_LR_FRFMSB, 0xE4);
-  lora_write_reg(handle, REG_LR_FRFMID, 0xC0);
-  lora_write_reg(handle, REG_LR_FRFLSB, 0x00);
+  lora_set_frequency(handle, freq_hz);
 
   // standby
   lora_write_reg(handle, REG_LR_OPMODE, 0x81);
@@ -101,4 +101,28 @@ float lora_get_freq(spi_device_handle_t handle) {
                  (lora_read_reg(handle, 0x08));
 
   return (float)frf * 61.03515625 / 1e6;
+}
+
+// https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
+void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
+  uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
+
+  lora_write_reg(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF);
+  lora_write_reg(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF);
+  lora_write_reg(handle, REG_LR_FRFLSB, frf & 0xFF);
+}
+
+void lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm) {
+  uint8_t pa_config = 0;
+
+  pa_config |= (1 << 7);  // PA_BOOST, max power of +20 dBm
+  pa_config |= (7 << 4);  // MaxPower
+  pa_config |= (dbm - 2); // OutputPower
+  lora_write_reg(handle, REG_LR_PACONFIG, pa_config);
+}
+
+uint8_t lora_get_tx_power(spi_device_handle_t handle) {
+  uint8_t reg = lora_read_reg(handle, REG_LR_PACONFIG);
+  return (reg & 0x0F) + 2; // power is lower 4 bits of PaConfig register,
+                           // convert it to dbm by adding 2
 }
