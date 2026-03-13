@@ -15,9 +15,6 @@
 #define RST 23
 #define MISO 19
 
-#define IRQ_TX_DONE_MASK 0x08 // 0000 1000, bit 3
-#define IRQ_RX_DONE_MASK 0x40 // 0100 0000, bit 6
-
 void lora_reset() {
     gpio_set_level(RST, 0);
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -101,14 +98,16 @@ spi_device_handle_t lora_init() {
 }
 
 float lora_get_freq(spi_device_handle_t handle) {
-    uint32_t frf = (lora_read_reg(handle, 0x06) << 16) |
-                   (lora_read_reg(handle, 0x07) << 8) |
-                   (lora_read_reg(handle, 0x08));
+    uint32_t frf = (lora_read_reg(handle, REG_LR_FRFMSB) << 16) |
+                   (lora_read_reg(handle, REG_LR_FRFMID) << 8) |
+                   (lora_read_reg(handle, REG_LR_FRFLSB));
 
     return (float)frf * 61.03515625 / 1e6;
 }
 
 // https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
+// Formula: Frf = (Freq * 2^19) / Fxosc
+// Fxosc = 32 MHz (SX1276 crystal frequency)
 void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
     uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
 
@@ -118,17 +117,22 @@ void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
 }
 
 void lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm) {
+    // SX1276 datasheet: PA_BOOST output power range is 2-17 dBm
+    // Pout = Pmax - 15 + OutputPower (where Pmax = 15 dBm for PA_BOOST)
+    if (dbm < 2) dbm = 2;
     if (dbm > 17) dbm = 17;
 
     uint8_t pa_config = 0;
 
-    pa_config |= (1 << 7); // PA_BOOST, max power of +20 dBm
-    pa_config |= (7 << 4); // MaxPower
+    // Select PA_BOOST pin (bit 7)
+    pa_config |= RFLR_PACONFIG_PASELECT_PABOOST;
 
-    if (dbm < 2) dbm = 2;
-    if (dbm > 17) dbm = 17;
+    // Set MaxPower (bits 6-4): 111 = 15 dBm (Pmax)
+    pa_config |= (7 << 4);
 
+    // Set OutputPower (bits 3-0): Pout = dbm - 2
     pa_config |= (dbm - 2);
+
     lora_write_reg(handle, REG_LR_PACONFIG, pa_config);
 }
 
@@ -138,16 +142,19 @@ uint8_t lora_get_tx_power(spi_device_handle_t handle) {
                              // convert it to dbm by adding 2
 }
 
-void lora_set_mode_standby(spi_device_handle_t handle) {
+// Helper function to set operation mode using datasheet constants
+static void lora_set_opmode(spi_device_handle_t handle, uint8_t mode) {
     uint8_t opmode = lora_read_reg(handle, REG_LR_OPMODE);
-    opmode = (opmode & 0xF8) | 0x01; // keep upper 5 bits, set last 3 bits to 001 (standby)
+    opmode = (opmode & RFLR_OPMODE_MASK) | mode;
     lora_write_reg(handle, REG_LR_OPMODE, opmode);
 }
 
+void lora_set_mode_standby(spi_device_handle_t handle) {
+    lora_set_opmode(handle, RFLR_OPMODE_STANDBY);
+}
+
 void lora_set_mode_tx(spi_device_handle_t handle) {
-    uint8_t opmode = lora_read_reg(handle, REG_LR_OPMODE);
-    opmode = (opmode & 0xF8) | 0x03; // keep upper 5 bits, set last 3 bits to 011 (TX)
-    lora_write_reg(handle, REG_LR_OPMODE, opmode);
+    lora_set_opmode(handle, RFLR_OPMODE_TRANSMITTER);
 }
 
 void lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr) {
@@ -165,12 +172,42 @@ void lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
 }
 
 uint8_t lora_get_irq_flags(spi_device_handle_t handle) {
-    uint8_t flags = lora_read_reg(handle, REG_LR_IRQFLAGS);
-    return flags;
+    return lora_read_reg(handle, REG_LR_IRQFLAGS);
 }
+
 void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags) {
+    // Writing 1 to IRQ flags clears them (per datasheet)
     lora_write_reg(handle, REG_LR_IRQFLAGS, flags);
 }
 
 void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
-                      uint8_t len);
+                      uint8_t len) {
+    lora_set_mode_standby(handle);
+
+    lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
+
+    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
+
+    for (int i = 0; i < len; i++) {
+        lora_write_reg(handle, REG_LR_FIFO, buf[i]);
+    }
+
+    lora_set_mode_tx(handle);
+
+    // Wait for TX_DONE interrupt (max timeout ~2 seconds)
+    uint32_t timeout = 2000; // ms
+    uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+    while ((lora_get_irq_flags(handle) & RFLR_IRQFLAGS_TXDONE) == 0) {
+        if ((xTaskGetTickCount() * portTICK_PERIOD_MS - start) > timeout) {
+            // Timeout - abort
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
+
+    lora_set_mode_standby(handle);
+}

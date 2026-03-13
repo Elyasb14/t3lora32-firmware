@@ -4,6 +4,10 @@
 #include <driver/spi_master.h>
 #include <stdint.h>
 
+// IRQ flag masks (from SX1276 datasheet)
+#define IRQ_TX_DONE_MASK    RFLR_IRQFLAGS_TXDONE    // 0x08
+#define IRQ_RX_DONE_MASK    RFLR_IRQFLAGS_RXDONE    // 0x40
+
 spi_device_handle_t lora_init();
 void lora_reset(void);
 
