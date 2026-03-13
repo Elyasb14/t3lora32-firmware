@@ -12,6 +12,8 @@
 #include "oled/oled.c"
 
 void app_main() {
+
+    char *data = "12345";
     spi_device_handle_t handle = lora_init();
 
     lora_set_tx_power(handle, 17);
@@ -22,4 +24,14 @@ void app_main() {
 
     printf("TX_POWER: %d\n", tx_power);
     printf("FREQ: %f\n", freq);
+
+    lora_set_fifo_tx_base_addr(handle, 0x00);
+    lora_write_fifo(handle, (uint8_t *)data, 5);
+    lora_set_mode_tx(handle);
+
+    while ((lora_get_irq_flags(handle) & IRQ_TX_DONE_MASK) == 0) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    lora_clear_irq_flags(handle, IRQ_TX_DONE_MASK);
+    lora_set_mode_standby(handle);
 }

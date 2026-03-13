@@ -15,6 +15,9 @@
 #define RST 23
 #define MISO 19
 
+#define IRQ_TX_DONE_MASK 0x08 // 0000 1000, bit 3
+#define IRQ_RX_DONE_MASK 0x40 // 0100 0000, bit 6
+
 void lora_reset() {
     gpio_set_level(RST, 0);
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -135,20 +138,39 @@ uint8_t lora_get_tx_power(spi_device_handle_t handle) {
                              // convert it to dbm by adding 2
 }
 
-void lora_set_mode_stdby(spi_device_handle_t handle) {
-    lora_write_reg(handle, REG_LR_OPMODE, 0x81);
+void lora_set_mode_standby(spi_device_handle_t handle) {
+    uint8_t opmode = lora_read_reg(handle, REG_LR_OPMODE);
+    opmode = (opmode & 0xF8) | 0x01; // keep upper 5 bits, set last 3 bits to 001 (standby)
+    lora_write_reg(handle, REG_LR_OPMODE, opmode);
 }
 
 void lora_set_mode_tx(spi_device_handle_t handle) {
-    lora_write_reg(handle, REG_LR_OPMODE, 0x83);
+    uint8_t opmode = lora_read_reg(handle, REG_LR_OPMODE);
+    opmode = (opmode & 0xF8) | 0x03; // keep upper 5 bits, set last 3 bits to 011 (TX)
+    lora_write_reg(handle, REG_LR_OPMODE, opmode);
 }
 
-void lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr);
-void lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
-                     uint8_t len);
+void lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr) {
+    lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, addr);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, addr);
+}
 
-uint8_t lora_get_irq_flags(spi_device_handle_t handle);
-void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags);
+void lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
+                     uint8_t len) {
+    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
+
+    for (int i = 0; i < len; i++) {
+        lora_write_reg(handle, REG_LR_FIFO, buf[i]);
+    }
+}
+
+uint8_t lora_get_irq_flags(spi_device_handle_t handle) {
+    uint8_t flags = lora_read_reg(handle, REG_LR_IRQFLAGS);
+    return flags;
+}
+void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags) {
+    lora_write_reg(handle, REG_LR_IRQFLAGS, flags);
+}
 
 void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
                       uint8_t len);

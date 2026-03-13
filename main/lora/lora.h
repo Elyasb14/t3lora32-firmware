@@ -20,7 +20,7 @@ void lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr);
 void lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
                      uint8_t len);
 
-void lora_set_mode_idle(spi_device_handle_t handle);
+void lora_set_mode_standby(spi_device_handle_t handle);
 void lora_set_mode_tx(spi_device_handle_t handle);
 
 uint8_t lora_get_irq_flags(spi_device_handle_t handle);
