@@ -143,7 +143,7 @@ uint8_t lora_get_tx_power(spi_device_handle_t handle) {
 }
 
 // Helper function to set operation mode using datasheet constants
-static void lora_set_opmode(spi_device_handle_t handle, uint8_t mode) {
+void lora_set_opmode(spi_device_handle_t handle, uint8_t mode) {
     uint8_t opmode = lora_read_reg(handle, REG_LR_OPMODE);
     opmode = (opmode & RFLR_OPMODE_MASK) | mode;
     lora_write_reg(handle, REG_LR_OPMODE, opmode);
@@ -210,4 +210,77 @@ void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
     lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
 
     lora_set_mode_standby(handle);
+}
+
+// Reception mode helpers
+void lora_set_mode_rx_single(spi_device_handle_t handle) {
+    lora_set_mode_standby(handle);
+    lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
+    lora_set_opmode(handle, RFLR_OPMODE_RECEIVER_SINGLE);
+}
+
+bool lora_is_packet_received(spi_device_handle_t handle) {
+    return (lora_get_irq_flags(handle) & RFLR_IRQFLAGS_RXDONE) != 0;
+}
+
+bool lora_is_crc_error(spi_device_handle_t handle) {
+    return (lora_get_irq_flags(handle) & RFLR_IRQFLAGS_PAYLOADCRCERROR) != 0;
+}
+
+uint8_t lora_get_rx_payload_length(spi_device_handle_t handle) {
+    return lora_read_reg(handle, REG_LR_RXNBBYTES);
+}
+
+void lora_read_fifo_payload(spi_device_handle_t handle, uint8_t *buf, uint8_t len) {
+    for (int i = 0; i < len; i++) {
+        buf[i] = lora_read_reg(handle, REG_LR_FIFO);
+    }
+}
+
+void lora_clear_rx_flags(spi_device_handle_t handle) {
+    lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE | RFLR_IRQFLAGS_PAYLOADCRCERROR);
+}
+
+// Main receive function
+int16_t lora_receive_packet(spi_device_handle_t handle, uint8_t *buf,
+                            uint16_t buf_size, uint32_t timeout_ms) {
+    // Enforce FIFO hardware limit (256 bytes)
+    if (buf_size > 256) {
+        buf_size = 256;
+    }
+
+    lora_set_mode_rx_single(handle);
+
+    uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+    while (!lora_is_packet_received(handle)) {
+        if (timeout_ms > 0) {
+            uint32_t elapsed = (xTaskGetTickCount() * portTICK_PERIOD_MS) - start;
+            if (elapsed > timeout_ms) {
+                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXTIMEOUT);
+                return -1; // Timeout
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    if (lora_is_crc_error(handle)) {
+        lora_clear_rx_flags(handle);
+        return -2; // CRC Error
+    }
+
+    uint8_t rx_len = lora_get_rx_payload_length(handle);
+    uint16_t bytes_to_read = (rx_len > buf_size) ? buf_size : rx_len;
+
+    // Limit to FIFO size (256 bytes) - though rx_len is uint8_t so max is 255
+    if (bytes_to_read > 256) {
+        bytes_to_read = 256;
+    }
+
+    lora_read_fifo_payload(handle, buf, (uint8_t)bytes_to_read);
+    lora_clear_rx_flags(handle);
+    lora_set_mode_standby(handle);
+
+    return (int16_t)bytes_to_read;
 }
