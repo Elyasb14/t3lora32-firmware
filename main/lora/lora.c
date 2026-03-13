@@ -71,7 +71,7 @@ void lora_write_reg(spi_device_handle_t handle, uint8_t reg, uint8_t value) {
 }
 
 void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz);
-spi_device_handle_t lora_init(uint32_t freq_hz) {
+spi_device_handle_t lora_init() {
     gpio_config_t io_conf = {
         .mode = GPIO_MODE_OUTPUT,
         .pin_bit_mask = (1ULL << RST),
@@ -85,8 +85,10 @@ spi_device_handle_t lora_init(uint32_t freq_hz) {
     // LoRa mode
     lora_write_reg(handle, REG_LR_OPMODE, 0x80);
 
-    lora_set_frequency(handle, freq_hz);
-
+    // default freq is 915 mhz
+    lora_write_reg(handle, REG_LR_FRFMSB, 0xE4);
+    lora_write_reg(handle, REG_LR_FRFMID, 0xC0);
+    lora_write_reg(handle, REG_LR_FRFLSB, 0x00);
     // standby
     lora_write_reg(handle, REG_LR_OPMODE, 0x81);
 
@@ -132,3 +134,21 @@ uint8_t lora_get_tx_power(spi_device_handle_t handle) {
     return (reg & 0x0F) + 2; // power is lower 4 bits of PaConfig register,
                              // convert it to dbm by adding 2
 }
+
+void lora_set_mode_stdby(spi_device_handle_t handle) {
+    lora_write_reg(handle, REG_LR_OPMODE, 0x81);
+}
+
+void lora_set_mode_tx(spi_device_handle_t handle) {
+    lora_write_reg(handle, REG_LR_OPMODE, 0x83);
+}
+
+void lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr);
+void lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
+                     uint8_t len);
+
+uint8_t lora_get_irq_flags(spi_device_handle_t handle);
+void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags);
+
+void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
+                      uint8_t len);
