@@ -13,8 +13,8 @@
 #include "oled/oled.c"
 
 // Configuration: Uncomment the mode you want to test
-#define LORA_TEST_MODE_TX
-// #define LORA_TEST_MODE_RX
+// #define LORA_TEST_MODE_TX
+#define LORA_TEST_MODE_RX
 
 void app_main() {
     spi_device_handle_t handle = lora_init();
@@ -31,9 +31,10 @@ void app_main() {
     char *data = "12345";
     printf("Transmitting: '%s'\n", data);
 
-    lora_send_packet(handle, (uint8_t *)data, 5);
-
-    printf("Packet sent successfully\n");
+    while (1) {
+        lora_send_packet(handle, (uint8_t *)data, 5);
+        printf("Packet sent successfully\n");
+    }
 
 #elif defined(LORA_TEST_MODE_RX)
     // --- RECEIVER CODE ---
