@@ -180,6 +180,23 @@ void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags) {
     lora_write_reg(handle, REG_LR_IRQFLAGS, flags);
 }
 
+void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
+    uint8_t current_mapping = lora_read_reg(handle, REG_LR_DIOMAPPING1);
+    
+    // Clear DIO0 bits (bits 6-7)
+    current_mapping &= RFLR_DIOMAPPING1_DIO0_MASK;
+    
+    if (tx_mode) {
+        // Set DIO0 to TxDone (01)
+        current_mapping |= RFLR_DIOMAPPING1_DIO0_01;
+    } else {
+        // Set DIO0 to RxDone (00) - this is the default
+        current_mapping |= RFLR_DIOMAPPING1_DIO0_00;
+    }
+    
+    lora_write_reg(handle, REG_LR_DIOMAPPING1, current_mapping);
+}
+
 void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
                       uint8_t len) {
     lora_set_mode_standby(handle);
@@ -218,6 +235,13 @@ void lora_set_mode_rx_single(spi_device_handle_t handle) {
     lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
     lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
     lora_set_opmode(handle, RFLR_OPMODE_RECEIVER_SINGLE);
+}
+
+void lora_set_mode_rx_continuous(spi_device_handle_t handle) {
+    lora_set_mode_standby(handle);
+    lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
+    lora_set_opmode(handle, RFLR_OPMODE_RECEIVER);
 }
 
 bool lora_is_packet_received(spi_device_handle_t handle) {
