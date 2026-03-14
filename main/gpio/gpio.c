@@ -1,9 +1,11 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
 #include "freertos/task.h"
-#include "freertos/semphr.h"
-#include <stdio.h>
+#include <esp_attr.h>
 #include <stdatomic.h>
+#include <stdbool.h>
+#include <stdio.h>
 
 #define GPIO_LED 25
 #define DIO0_PIN 26
@@ -12,7 +14,7 @@
 static volatile atomic_bool dio0_triggered = ATOMIC_VAR_INIT(false);
 
 // ISR handler for DIO0
-static void IRAM_ATTR dio0_isr_handler(void* arg) {
+static void IRAM_ATTR dio0_isr_handler(void *arg) {
     atomic_store(&dio0_triggered, true);
 }
 
@@ -24,12 +26,12 @@ void gpio_init_interrupt(void) {
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
     io_conf.intr_type = GPIO_INTR_POSEDGE; // Trigger on rising edge
-    
+
     gpio_config(&io_conf);
-    
+
     // Install ISR service
     gpio_install_isr_service(0);
-    
+
     // Add ISR handler
     gpio_isr_handler_add(DIO0_PIN, dio0_isr_handler, NULL);
 }
