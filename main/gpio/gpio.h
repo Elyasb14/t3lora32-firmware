@@ -2,7 +2,6 @@
 #define GPIO_H
 
 #include <stdbool.h>
-#include <stdint.h>
 
 void gpio_blink_led(void);
 void gpio_init_interrupt(void);

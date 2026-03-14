@@ -37,21 +37,17 @@ void app_main() {
 
     spi_device_handle_t handle = lora_init();
 
-    // Configure LoRa parameters
-    lora_set_tx_power(handle, 17);
+    lora_set_tx_power(handle, 1);
     lora_set_frequency(handle, 903000000);
 
     printf("TX Power: %d dBm\n", lora_get_tx_power(handle));
     printf("Frequency: %.2f MHz\n", lora_get_freq(handle));
 
-    // Initialize GPIO interrupts for DIO0
     gpio_init_interrupt();
     printf("GPIO Interrupt Initialized\n");
 
-    // Configure DIO0 mapping for RX (default)
     lora_set_dio0_mapping(handle, false);
 
-    // Start RX Continuous mode
     lora_set_mode_rx_continuous(handle);
     printf("Entering RX Continuous Mode...\n");
 
@@ -76,7 +72,7 @@ void app_main() {
 
             // Handle RX Done
             if (flags & RFLR_IRQFLAGS_RXDONE) {
-                gpio_blink_led();
+                gpio_blink_led(1);
 
                 uint8_t rx_len = lora_get_rx_payload_length(handle);
                 uint16_t bytes_to_read = rx_len;
@@ -112,7 +108,7 @@ void app_main() {
 
             // Handle TX Done
             if (flags & RFLR_IRQFLAGS_TXDONE) {
-                gpio_blink_led();
+                gpio_blink_led(3);
                 printf("Packet sent successfully (TX Done Interrupt)\n");
 
                 // Clear TX flags
