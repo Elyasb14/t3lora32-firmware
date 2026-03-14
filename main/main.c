@@ -1,3 +1,4 @@
+#include "gpio/gpio.h"
 #include "i2c/i2c.h"
 #include "lora/lora.h"
 #include "oled/oled.h"
@@ -8,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "gpio/gpio.c"
 #include "i2c/i2c.c"
 #include "lora/lora.c"
 #include "oled/oled.c"
@@ -28,11 +30,12 @@ void app_main() {
 
 #ifdef LORA_TEST_MODE_TX
     // --- TRANSMITTER CODE ---
-    char *data = "12345";
+    char *data = "hello from lora custom firmware!";
     printf("Transmitting: '%s'\n", data);
 
     while (1) {
-        lora_send_packet(handle, (uint8_t *)data, 5);
+        lora_send_packet(handle, (uint8_t *)data, strlen(data));
+        gpio_blink_led();
         printf("Packet sent successfully\n");
     }
 
@@ -46,6 +49,7 @@ void app_main() {
         int16_t rx_len = lora_receive_packet(handle, rx_buf, sizeof(rx_buf), 5000);
 
         if (rx_len > 0) {
+            gpio_blink_led();
             // 1. Print Hex Dump
             printf("Received %d bytes (Hex): ", rx_len);
             for (int i = 0; i < rx_len; i++) {
@@ -69,7 +73,7 @@ void app_main() {
             printf("CRC Error in received packet\n");
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Prevent CPU hogging
+        vTaskDelay(pdMS_TO_TICKS(100)); // Prevent CPU hogging
     }
 #endif
 }
