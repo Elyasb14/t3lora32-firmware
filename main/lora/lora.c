@@ -5,7 +5,6 @@
 #include "sx1276_regs_lora.h"
 #include <assert.h>
 #include <freertos/task.h>
-#include <math.h>
 #include <stdint.h>
 
 #define MOSI 27
@@ -180,6 +179,23 @@ void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags) {
     lora_write_reg(handle, REG_LR_IRQFLAGS, flags);
 }
 
+void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
+    uint8_t current_mapping = lora_read_reg(handle, REG_LR_DIOMAPPING1);
+
+    // Clear DIO0 bits (bits 6-7)
+    current_mapping &= RFLR_DIOMAPPING1_DIO0_MASK;
+
+    if (tx_mode) {
+        // set DIO0 to TxDone (01)
+        current_mapping |= RFLR_DIOMAPPING1_DIO0_01;
+    } else {
+        // set DIO0 to RxDone (00) - this is the default
+        current_mapping |= RFLR_DIOMAPPING1_DIO0_00;
+    }
+
+    lora_write_reg(handle, REG_LR_DIOMAPPING1, current_mapping);
+}
+
 void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
                       uint8_t len) {
     lora_set_mode_standby(handle);
@@ -212,12 +228,18 @@ void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
     lora_set_mode_standby(handle);
 }
 
-// Reception mode helpers
 void lora_set_mode_rx_single(spi_device_handle_t handle) {
     lora_set_mode_standby(handle);
     lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
     lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
     lora_set_opmode(handle, RFLR_OPMODE_RECEIVER_SINGLE);
+}
+
+void lora_set_mode_rx_continuous(spi_device_handle_t handle) {
+    lora_set_mode_standby(handle);
+    lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
+    lora_set_opmode(handle, RFLR_OPMODE_RECEIVER);
 }
 
 bool lora_is_packet_received(spi_device_handle_t handle) {
@@ -242,10 +264,11 @@ void lora_clear_rx_flags(spi_device_handle_t handle) {
     lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE | RFLR_IRQFLAGS_PAYLOADCRCERROR);
 }
 
-// Main receive function
+// returns -2: crc error
+// returns -1: timeout
 int16_t lora_receive_packet(spi_device_handle_t handle, uint8_t *buf,
                             uint16_t buf_size, uint32_t timeout_ms) {
-    // Enforce FIFO hardware limit (256 bytes)
+    // fifo buffer is 256 bytes
     if (buf_size > 256) {
         buf_size = 256;
     }
@@ -259,7 +282,7 @@ int16_t lora_receive_packet(spi_device_handle_t handle, uint8_t *buf,
             uint32_t elapsed = (xTaskGetTickCount() * portTICK_PERIOD_MS) - start;
             if (elapsed > timeout_ms) {
                 lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXTIMEOUT);
-                return -1; // Timeout
+                return -1;
             }
         }
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -267,13 +290,12 @@ int16_t lora_receive_packet(spi_device_handle_t handle, uint8_t *buf,
 
     if (lora_is_crc_error(handle)) {
         lora_clear_rx_flags(handle);
-        return -2; // CRC Error
+        return -2;
     }
 
     uint8_t rx_len = lora_get_rx_payload_length(handle);
     uint16_t bytes_to_read = (rx_len > buf_size) ? buf_size : rx_len;
 
-    // Limit to FIFO size (256 bytes) - though rx_len is uint8_t so max is 255
     if (bytes_to_read > 256) {
         bytes_to_read = 256;
     }
