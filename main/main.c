@@ -72,7 +72,7 @@ void app_main() {
 
             // Handle RX Done
             if (flags & RFLR_IRQFLAGS_RXDONE) {
-                gpio_blink_led(1);
+                gpio_blink_led();
 
                 uint8_t rx_len = lora_get_rx_payload_length(handle);
                 uint16_t bytes_to_read = rx_len;
@@ -108,7 +108,7 @@ void app_main() {
 
             // Handle TX Done
             if (flags & RFLR_IRQFLAGS_TXDONE) {
-                gpio_blink_led(3);
+                gpio_blink_led();
                 printf("Packet sent successfully (TX Done Interrupt)\n");
 
                 // Clear TX flags
