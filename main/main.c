@@ -19,11 +19,9 @@
 #define TX_TRIGGER_CHAR 't'
 #define UART_PORT UART_NUM_0
 
-// Forward declarations
 void send_packet_manual(spi_device_handle_t handle);
 
 void app_main() {
-    // Initialize UART for manual trigger
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -39,7 +37,10 @@ void app_main() {
 
     lora_set_tx_power(handle, 1);
     lora_set_frequency(handle, 903000000);
+    lora_set_bandwidth(handle, LORA_BW_125_KHZ);
 
+    printf("\n");
+    printf("Bandwidth: %d \n", lora_get_bandwidth(handle));
     printf("TX Power: %d dBm\n", lora_get_tx_power(handle));
     printf("Frequency: %.2f MHz\n", lora_get_freq(handle));
 

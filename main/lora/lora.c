@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <freertos/task.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #define MOSI 27
 #define SCLK 5
@@ -305,4 +306,40 @@ int16_t lora_receive_packet(spi_device_handle_t handle, uint8_t *buf,
     lora_set_mode_standby(handle);
 
     return (int16_t)bytes_to_read;
+}
+
+void lora_set_bandwidth(spi_device_handle_t handle, lora_bandwidth_t bw) {
+    uint8_t reg = lora_read_reg(handle, REG_LR_MODEMCONFIG1);
+    reg = (reg & RFLR_MODEMCONFIG1_BW_MASK) | bw;
+    lora_write_reg(handle, REG_LR_MODEMCONFIG1, reg);
+}
+
+lora_bandwidth_t lora_get_bandwidth(spi_device_handle_t handle) {
+    uint8_t val = lora_read_reg(handle, REG_LR_MODEMCONFIG1);
+    val &= 0xf0;
+    return (lora_bandwidth_t)val;
+}
+
+void lora_set_coding_rate(spi_device_handle_t handle, lora_coding_rate_t cr) {
+    uint8_t reg = lora_read_reg(handle, REG_LR_MODEMCONFIG1);
+    reg = (reg & RFLR_MODEMCONFIG1_CODINGRATE_MASK) | cr;
+    lora_write_reg(handle, REG_LR_MODEMCONFIG1, reg);
+}
+
+void lora_set_spreading_factor(spi_device_handle_t handle, lora_spreading_factor_t sf) {
+    uint8_t reg = lora_read_reg(handle, REG_LR_MODEMCONFIG2);
+    reg = (reg & RFLR_MODEMCONFIG2_SF_MASK) | sf;
+    lora_write_reg(handle, REG_LR_MODEMCONFIG2, reg);
+}
+
+lora_spreading_factor_t lora_get_spreading_factor(spi_device_handle_t handle) {
+    uint8_t val = lora_read_reg(handle, REG_LR_MODEMCONFIG2);
+    val &= 0xF0;
+    return (lora_spreading_factor_t)val;
+}
+
+lora_coding_rate_t lora_get_coding_rate(spi_device_handle_t handle) {
+    uint8_t val = lora_read_reg(handle, REG_LR_MODEMCONFIG1);
+    val &= 0x0E;
+    return (lora_coding_rate_t)val;
 }

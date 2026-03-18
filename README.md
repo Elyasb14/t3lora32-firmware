@@ -21,9 +21,9 @@ This project is an ESP-IDF firmware for testing LoRa communication and OLED disp
     idf.py build
     ```
 
-4.  **Flash and monitor** (for the specific device connected to `/dev/tty.usbserial-576A0039151`):
+4.  **Flash and monitor**:
     ```bash
-    idf.py -p /dev/tty.usbserial-576A0039151 flash monitor
+    idf.py flash monitor
     ```
 
 ## Project Structure
