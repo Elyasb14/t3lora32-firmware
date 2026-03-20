@@ -125,8 +125,7 @@ void oled_set_text(oled_state_t *state, uint8_t page, const char *text) {
     if (page >= OLED_PAGES)
         return;
 
-    strncpy(state->pages[page], text, OLED_PAGE_CHARS);
-    state->pages[page][OLED_PAGE_CHARS] = '\0';
+    strlcpy(state->pages[page], text, OLED_PAGE_CHARS + 1);
     state->dirty = true;
 }
 
