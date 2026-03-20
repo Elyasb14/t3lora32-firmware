@@ -34,6 +34,7 @@ void oled_clear_display(i2c_master_dev_handle_t handle) {
 }
 
 // initialize SSD1306
+// TODO: this should return something that we pass around to all the other functions like an oled_t struct
 void oled_init(i2c_master_dev_handle_t handle) {
     oled_send_cmd(handle, 0xAE); // Display OFF
     oled_send_cmd(handle, 0xD5); // Set Display Clock Divide Ratio
@@ -47,7 +48,7 @@ void oled_init(i2c_master_dev_handle_t handle) {
     oled_send_cmd(handle, 0x14); // Enable Charge Pump
     oled_send_cmd(handle, 0xA1); // Set Segment Re-map (column 127 to SEG0)
     oled_send_cmd(handle,
-                  0xC8); // Set COM Output Scan Direction (remapped mode)
+                  0xC8);         // Set COM Output Scan Direction (remapped mode)
     oled_send_cmd(handle, 0xDA); // Set COM Pins Hardware Configuration
     oled_send_cmd(handle, 0x12); // Alternative COM pin configuration
     oled_send_cmd(handle, 0x81); // Set Contrast

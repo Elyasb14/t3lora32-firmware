@@ -33,16 +33,29 @@ void app_main() {
     uart_param_config(UART_PORT, &uart_config);
     uart_driver_install(UART_PORT, 256, 0, 0, NULL, 0);
 
+    i2c_master_dev_handle_t i2c_handle = i2c_init();
+    oled_init(i2c_handle);
+    oled_draw_string(i2c_handle, "mesh repeater", 0, 2);
+
     spi_device_handle_t handle = lora_init();
 
     lora_set_tx_power(handle, 1);
     lora_set_frequency(handle, 903000000);
     lora_set_bandwidth(handle, LORA_BW_125_KHZ);
 
-    printf("\n");
-    printf("Bandwidth: %d \n", lora_get_bandwidth(handle));
-    printf("TX Power: %d dBm\n", lora_get_tx_power(handle));
-    printf("Frequency: %.2f MHz\n", lora_get_freq(handle));
+    char bw_buffer[32];
+    char tx_buffer[32];
+    char freq_buffer[32];
+    char status_buffer[64];
+
+    snprintf(bw_buffer, sizeof(bw_buffer), "BW: %d kHz", lora_get_bandwidth(handle));
+    snprintf(tx_buffer, sizeof(tx_buffer), "TX: %d dBm", lora_get_tx_power(handle));
+    snprintf(freq_buffer, sizeof(freq_buffer), "Freq: %.2f MHz", lora_get_freq(handle));
+    snprintf(status_buffer, sizeof(status_buffer), "Status: %d", 0);
+
+    oled_draw_string(i2c_handle, freq_buffer, 0, 3);
+    oled_draw_string(i2c_handle, bw_buffer, 0, 4);
+    oled_draw_string(i2c_handle, tx_buffer, 0, 5);
 
     gpio_init_interrupt();
     printf("GPIO Interrupt Initialized\n");
