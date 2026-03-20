@@ -30,6 +30,6 @@ void oled_clear_display(oled_state_t *state);
 void oled_fill_white(oled_state_t *state);
 void oled_draw_char(oled_state_t *state, char c, uint8_t col, uint8_t page);
 void oled_draw_string(oled_state_t *state, const char *str, uint8_t col,
-                       uint8_t page);
+                      uint8_t page);
 
 #endif // OLED_H

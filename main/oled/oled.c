@@ -12,7 +12,7 @@ static void oled_send_cmd_internal(oled_state_t *state, uint8_t cmd) {
 }
 
 static void oled_send_data_internal(oled_state_t *state, uint8_t *data,
-                                     size_t len) {
+                                    size_t len) {
     uint8_t buf[len + 1];
     buf[0] = 0x40;
     memcpy(buf + 1, data, len);
@@ -149,7 +149,7 @@ void oled_redraw(oled_state_t *state) {
 
         if (state->pages[page][0] != '\0') {
             uint8_t col = state->shift_offset >= 0 ? (uint8_t)state->shift_offset
-                                                    : 0;
+                                                   : 0;
             oled_draw_string(state, state->pages[page], col, page);
         }
     }
