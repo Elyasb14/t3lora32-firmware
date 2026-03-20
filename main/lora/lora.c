@@ -7,6 +7,7 @@
 #include <freertos/task.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #define MOSI 27
 #define SCLK 5

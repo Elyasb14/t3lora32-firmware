@@ -5,6 +5,7 @@
 #include <driver/spi_master.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "esp_err.h"
 
 // IRQ flag masks (from SX1276 datasheet)
 #define IRQ_TX_DONE_MASK RFLR_IRQFLAGS_TXDONE // 0x08

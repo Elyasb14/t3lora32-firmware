@@ -1,6 +1,9 @@
 #include "gpio/gpio.h"
 #include "i2c/i2c.h"
 #include "lora/lora.h"
+#include "net/identity.h"
+#include "net/net.h"
+#include "net/packet.h"
 #include "oled/oled.h"
 #include <driver/gpio.h>
 #include <driver/i2c_types.h>
@@ -14,6 +17,7 @@
 #include "gpio/gpio.c"
 #include "i2c/i2c.c"
 #include "lora/lora.c"
+#include "net/identity.c"
 #include "oled/oled.c"
 
 #define TX_TRIGGER_CHAR 't'
@@ -48,7 +52,7 @@ static void oled_task(void *arg) {
     }
 }
 
-void send_packet_manual(spi_device_handle_t handle, oled_state_t *oled);
+void send_packet_manual(spi_device_handle_t handle, oled_state_t *oled, node_identity_t *identity);
 
 void app_main() {
     printf("\n");
@@ -63,6 +67,18 @@ void app_main() {
     uart_param_config(UART_PORT, &uart_config);
     uart_driver_install(UART_PORT, 256, 0, 0, NULL, 0);
 
+    node_identity_t identity;
+    if (identity_init(&identity) != ESP_OK) {
+        printf("Failed to initialize identity!\n");
+        return;
+    }
+
+    printf("Node ID: ");
+    for (int i = 0; i < NODE_ID_LEN; i++) {
+        printf("%02X", identity.node_id[i]);
+    }
+    printf("\n");
+
     i2c_master_dev_handle_t i2c_handle = i2c_init();
     oled_state_t oled = oled_init(i2c_handle);
 
@@ -72,19 +88,24 @@ void app_main() {
     lora_set_frequency(handle, 903000000);
     lora_set_bandwidth(handle, LORA_BW_125_KHZ);
 
+    char id_buffer[24];
     char bw_buffer[32];
     char tx_buffer[32];
     char freq_buffer[32];
 
+    snprintf(id_buffer, sizeof(id_buffer), "ID: %02X%02X%02X%02X",
+             identity.node_id[0], identity.node_id[1],
+             identity.node_id[2], identity.node_id[3]);
     snprintf(bw_buffer, sizeof(bw_buffer), "BW: %d kHz", lora_get_bandwidth(handle));
     snprintf(tx_buffer, sizeof(tx_buffer), "TX: %d dBm", lora_get_tx_power(handle));
     snprintf(freq_buffer, sizeof(freq_buffer), "Freq: %.2f MHz", lora_get_freq(handle));
 
     oled_clear_pages(&oled);
-    oled_set_text(&oled, 2, "mesh repeater");
-    oled_set_text(&oled, 3, freq_buffer);
-    oled_set_text(&oled, 4, bw_buffer);
-    oled_set_text(&oled, 5, tx_buffer);
+    oled_set_text(&oled, 2, id_buffer);
+    oled_set_text(&oled, 3, "mesh repeater");
+    oled_set_text(&oled, 4, freq_buffer);
+    oled_set_text(&oled, 5, bw_buffer);
+    oled_set_text(&oled, 6, tx_buffer);
 
     xTaskCreatePinnedToCore(oled_task, "oled_task", 3072, &oled,
                             configMAX_PRIORITIES - 3, NULL, 1);
@@ -104,7 +125,7 @@ void app_main() {
         if (uart_read_bytes(UART_PORT, &ch, 1, 0) > 0) {
             if (ch >= 32 && ch <= 126) {
                 printf("Manual TX Trigger received (char: %c)\n", ch);
-                send_packet_manual(handle, &oled);
+                send_packet_manual(handle, &oled, &identity);
             }
         }
 
@@ -162,21 +183,53 @@ void app_main() {
     }
 }
 
-void send_packet_manual(spi_device_handle_t handle, oled_state_t *oled) {
-    char *data = "hello";
-    printf("Transmitting: '%s'\n", data);
+static uint32_t g_seq_num = 0;
+
+void send_mesh_packet(spi_device_handle_t handle, node_identity_t *identity,
+                      const uint8_t *to_id, uint8_t type,
+                      const uint8_t *payload, size_t payload_len) {
+    size_t header_len = 1 + NODE_ID_LEN + NODE_ID_LEN + 4 + PUBKEY_LEN;
+    size_t packet_len = header_len + SIG_LEN + payload_len;
+    uint8_t packet[packet_len];
+
+    mesh_packet_t *pkt = (mesh_packet_t *)packet;
+    pkt->type = type;
+    memcpy(pkt->from_id, identity->node_id, NODE_ID_LEN);
+    memcpy(pkt->to_id, to_id, NODE_ID_LEN);
+    pkt->seq_num = g_seq_num++;
+    memcpy(pkt->public_key, identity->public_key, PUBKEY_LEN);
+
+    size_t sig_input_len = header_len + payload_len;
+    uint8_t sig_input[sig_input_len];
+    memcpy(sig_input, pkt, header_len);
+    memcpy(sig_input + header_len, payload, payload_len);
+
+    if (identity_sign(identity, sig_input, sig_input_len, pkt->signature) != ESP_OK) {
+        printf("Failed to sign packet\n");
+        return;
+    }
+
+    memcpy(packet + header_len + SIG_LEN, payload, payload_len);
 
     lora_set_dio0_mapping(handle, true);
-
     lora_set_mode_standby(handle);
     lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
     lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
-    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, strlen(data));
+    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, packet_len);
 
-    for (int i = 0; i < strlen(data); i++) {
-        lora_write_reg(handle, REG_LR_FIFO, data[i]);
+    for (size_t i = 0; i < packet_len; i++) {
+        lora_write_reg(handle, REG_LR_FIFO, packet[i]);
     }
 
     lora_set_mode_tx(handle);
+}
+
+void send_packet_manual(spi_device_handle_t handle, oled_state_t *oled, node_identity_t *identity) {
+    uint8_t broadcast_id[NODE_ID_LEN] = {0};
+    char *data = "hello";
+    printf("Transmitting: '%s'\n", data);
+
+    send_mesh_packet(handle, identity, broadcast_id, PKT_TYPE_TEXT,
+                     (uint8_t *)data, strlen(data));
     printf("TX Mode Started, waiting for interrupt...\n");
 }
