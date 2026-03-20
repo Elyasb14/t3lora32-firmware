@@ -25,6 +25,10 @@
 #define OLED_TASK_INTERVAL_MS 10
 #define OLED_SHIFT_INTERVAL_TICKS 500
 
+esp_err_t recv_mesh_packet(const uint8_t *raw, size_t raw_len,
+                           uint8_t *from_id, uint8_t *public_key,
+                           uint8_t *type, uint8_t **payload, size_t *payload_len);
+
 static void oled_task(void *arg) {
     oled_state_t *state = (oled_state_t *)arg;
 
@@ -143,21 +147,37 @@ void app_main() {
 
                 lora_read_fifo_payload(handle, rx_buf, (uint8_t)bytes_to_read);
 
-                printf("Received %d bytes (Hex): ", bytes_to_read);
-                for (int i = 0; i < bytes_to_read; i++) {
-                    printf("%02X ", rx_buf[i]);
-                }
-                printf("\n");
+                uint8_t from_id[NODE_ID_LEN];
+                uint8_t public_key[PUBKEY_LEN];
+                uint8_t type;
+                uint8_t *payload;
+                size_t payload_len;
 
-                printf("Received String: '");
-                for (int i = 0; i < bytes_to_read; i++) {
-                    if (rx_buf[i] >= 32 && rx_buf[i] <= 126) {
-                        printf("%c", rx_buf[i]);
-                    } else {
-                        printf(".");
+                esp_err_t err = recv_mesh_packet(rx_buf, bytes_to_read,
+                                                  from_id, public_key,
+                                                  &type, &payload, &payload_len);
+
+                if (err == ESP_OK) {
+                    printf("From: ");
+                    for (int i = 0; i < NODE_ID_LEN; i++) {
+                        printf("%02X", from_id[i]);
                     }
+                    printf(" Type: 0x%02X\n", type);
+
+                    if (payload_len > 0 && payload_len < 256) {
+                        printf("Payload (%zu bytes): '", payload_len);
+                        for (size_t i = 0; i < payload_len; i++) {
+                            if (payload[i] >= 32 && payload[i] <= 126) {
+                                printf("%c", payload[i]);
+                            } else {
+                                printf(".");
+                            }
+                        }
+                        printf("'\n");
+                    }
+                } else {
+                    printf("Invalid/unsigned packet (%d bytes)\n", bytes_to_read);
                 }
-                printf("'\n");
 
                 lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE);
             }
@@ -184,6 +204,48 @@ void app_main() {
 }
 
 static uint32_t g_seq_num = 0;
+
+typedef struct {
+    uint8_t from_id[NODE_ID_LEN];
+    uint8_t public_key[PUBKEY_LEN];
+    uint8_t type;
+    uint8_t valid;
+    uint8_t payload[];
+} recv_packet_t;
+
+esp_err_t recv_mesh_packet(const uint8_t *raw, size_t raw_len,
+                           uint8_t *from_id, uint8_t *public_key,
+                           uint8_t *type, uint8_t **payload, size_t *payload_len) {
+    size_t header_len = 1 + NODE_ID_LEN + NODE_ID_LEN + 4 + PUBKEY_LEN;
+    size_t sig_offset = header_len;
+    size_t min_len = sig_offset + SIG_LEN;
+
+    if (raw_len < min_len) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    mesh_packet_t *pkt = (mesh_packet_t *)raw;
+
+    memcpy(from_id, pkt->from_id, NODE_ID_LEN);
+    memcpy(public_key, pkt->public_key, PUBKEY_LEN);
+    *type = pkt->type;
+
+    size_t sig_input_len = sig_offset + (raw_len - min_len);
+    uint8_t sig_input[sig_input_len];
+    memcpy(sig_input, pkt, sig_offset);
+    memcpy(sig_input + sig_offset, raw + min_len, raw_len - min_len);
+
+    esp_err_t err = identity_verify(public_key, sig_input, sig_input_len, pkt->signature);
+    if (err != ESP_OK) {
+        printf("Signature verification failed!\n");
+        return err;
+    }
+
+    *payload_len = raw_len - min_len;
+    *payload = (uint8_t *)(raw + min_len);
+
+    return ESP_OK;
+}
 
 void send_mesh_packet(spi_device_handle_t handle, node_identity_t *identity,
                       const uint8_t *to_id, uint8_t type,
