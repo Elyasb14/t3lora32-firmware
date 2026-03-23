@@ -71,7 +71,17 @@ void lora_write_reg(spi_device_handle_t handle, uint8_t reg, uint8_t value) {
     spi_device_transmit(handle, &t);
 }
 
-void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz);
+// https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
+// Formula: Frf = (Freq * 2^19) / Fxosc
+// Fxosc = 32 MHz (SX1276 crystal frequency)
+void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
+    uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
+
+    lora_write_reg(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF);
+    lora_write_reg(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF);
+    lora_write_reg(handle, REG_LR_FRFLSB, frf & 0xFF);
+}
+
 spi_device_handle_t lora_init() {
     gpio_config_t io_conf = {
         .mode = GPIO_MODE_OUTPUT,
@@ -104,17 +114,6 @@ float lora_get_freq(spi_device_handle_t handle) {
                    (lora_read_reg(handle, REG_LR_FRFLSB));
 
     return (float)frf * 61.03515625 / 1e6;
-}
-
-// https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
-// Formula: Frf = (Freq * 2^19) / Fxosc
-// Fxosc = 32 MHz (SX1276 crystal frequency)
-void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
-    uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
-
-    lora_write_reg(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF);
-    lora_write_reg(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF);
-    lora_write_reg(handle, REG_LR_FRFLSB, frf & 0xFF);
 }
 
 void lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm) {
