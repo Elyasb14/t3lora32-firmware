@@ -11,11 +11,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "gpio/gpio.c"
-#include "i2c/i2c.c"
-#include "lora/lora.c"
-#include "oled/oled.c"
-
 #define TX_TRIGGER_CHAR 't'
 #define UART_PORT UART_NUM_0
 #define OLED_TASK_INTERVAL_MS 10
