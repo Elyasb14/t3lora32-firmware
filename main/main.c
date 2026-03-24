@@ -99,7 +99,7 @@ void app_main() {
         if (uart_read_bytes(UART_PORT, &ch, 1, 0) > 0) {
             if (ch >= 32 && ch <= 126) {
                 printf("Manual TX Trigger received (char: %c)\n", ch);
-                send_packet_manual(handle, &oled);
+                send_packet_manual(handle);
             }
         }
 
@@ -158,18 +158,19 @@ void app_main() {
 }
 
 void send_packet_manual(spi_device_handle_t handle) {
-    char *data = "hello";
+    const char *data = "hello";
+    size_t data_len = strlen(data);
     printf("Transmitting: '%s'\n", data);
 
     lora_set_dio0_mapping(handle, true);
 
     lora_set_mode_standby(handle);
-    lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
-    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
-    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, strlen(data));
+    ESP_ERROR_CHECK(lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00));
+    ESP_ERROR_CHECK(lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00));
+    ESP_ERROR_CHECK(lora_write_reg(handle, REG_LR_PAYLOADLENGTH, data_len));
 
-    for (int i = 0; i < strlen(data); i++) {
-        lora_write_reg(handle, REG_LR_FIFO, data[i]);
+    for (size_t i = 0; i < data_len; i++) {
+        ESP_ERROR_CHECK(lora_write_reg(handle, REG_LR_FIFO, data[i]));
     }
 
     lora_set_mode_tx(handle);
