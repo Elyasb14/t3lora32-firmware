@@ -89,7 +89,17 @@ static void lora_write_reg_checked(spi_device_handle_t handle, uint8_t reg,
     ESP_ERROR_CHECK(lora_write_reg(handle, reg, value));
 }
 
-void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz);
+// https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
+// Formula: Frf = (Freq * 2^19) / Fxosc
+// Fxosc = 32 MHz (SX1276 crystal frequency)
+void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
+    uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
+
+    lora_write_reg_checked(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF);
+    lora_write_reg_checked(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF);
+    lora_write_reg_checked(handle, REG_LR_FRFLSB, frf & 0xFF);
+}
+
 spi_device_handle_t lora_init() {
     gpio_config_t io_conf = {
         .mode = GPIO_MODE_OUTPUT,
@@ -120,17 +130,6 @@ float lora_get_freq(spi_device_handle_t handle) {
                    (lora_read_reg_checked(handle, REG_LR_FRFLSB));
 
     return (float)frf * 61.03515625 / 1e6;
-}
-
-// https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
-// Formula: Frf = (Freq * 2^19) / Fxosc
-// Fxosc = 32 MHz (SX1276 crystal frequency)
-void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
-    uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
-
-    lora_write_reg_checked(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF);
-    lora_write_reg_checked(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF);
-    lora_write_reg_checked(handle, REG_LR_FRFLSB, frf & 0xFF);
 }
 
 void lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm) {
@@ -215,15 +214,12 @@ void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
 }
 
 esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *pkt) {
-    if (!pkt || pkt->payload_len > LORA_MAX_PAYLOAD) {
-        return ESP_ERR_INVALID_ARG;
-    }
+    if (!pkt || pkt->payload_len > LORA_MAX_PAYLOAD) return ESP_ERR_INVALID_ARG;
 
     lora_set_mode_standby(handle);
 
     lora_write_reg_checked(handle, REG_LR_FIFOTXBASEADDR, 0x00);
     lora_write_reg_checked(handle, REG_LR_FIFOADDRPTR, 0x00);
-
     lora_write_reg_checked(handle, REG_LR_PAYLOADLENGTH, pkt->payload_len + 3);
 
     uint8_t tx_len = (uint8_t)(3 + pkt->payload_len);
