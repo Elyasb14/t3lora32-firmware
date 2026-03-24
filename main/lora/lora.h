@@ -66,16 +66,16 @@ void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz);
 void lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm);
 
 // FIFO operations
-void lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr);
-void lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
-                     uint8_t len);
+esp_err_t lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr);
+esp_err_t lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
+                          uint8_t len);
 
 // mode setting (public helper)
-void lora_set_opmode(spi_device_handle_t handle, uint8_t mode);
+esp_err_t lora_set_opmode(spi_device_handle_t handle, uint8_t mode);
 
 // operation modes
-void lora_set_mode_standby(spi_device_handle_t handle);
-void lora_set_mode_tx(spi_device_handle_t handle);
+esp_err_t lora_set_mode_standby(spi_device_handle_t handle);
+esp_err_t lora_set_mode_tx(spi_device_handle_t handle);
 
 // IRQ handling
 uint8_t lora_get_irq_flags(spi_device_handle_t handle);

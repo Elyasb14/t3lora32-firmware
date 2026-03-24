@@ -78,16 +78,16 @@ esp_err_t lora_write_reg(spi_device_handle_t handle, uint8_t reg,
     return spi_device_transmit(handle, &t);
 }
 
-static uint8_t lora_read_reg_checked(spi_device_handle_t handle, uint8_t reg) {
-    uint8_t value = 0;
-    ESP_ERROR_CHECK(lora_read_reg(handle, reg, &value));
-    return value;
-}
-
-static void lora_write_reg_checked(spi_device_handle_t handle, uint8_t reg,
-                                   uint8_t value) {
-    ESP_ERROR_CHECK(lora_write_reg(handle, reg, value));
-}
+// static uint8_t lora_read_reg_checked(spi_device_handle_t handle, uint8_t reg) {
+//     uint8_t value = 0;
+//     ESP_ERROR_CHECK(lora_read_reg(handle, reg, &value));
+//     return value;
+// }
+//
+// static void lora_write_reg_checked(spi_device_handle_t handle, uint8_t reg,
+//                                    uint8_t value) {
+//     ESP_ERROR_CHECK(lora_write_reg(handle, reg, value));
+// }
 
 // https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
 // Formula: Frf = (Freq * 2^19) / Fxosc
@@ -159,41 +159,56 @@ uint8_t lora_get_tx_power(spi_device_handle_t handle) {
 }
 
 // Helper function to set operation mode using datasheet constants
-void lora_set_opmode(spi_device_handle_t handle, uint8_t mode) {
-    uint8_t opmode = lora_read_reg_checked(handle, REG_LR_OPMODE);
+esp_err_t lora_set_opmode(spi_device_handle_t handle, uint8_t mode) {
+    uint8_t opmode;
+    esp_err_t err = lora_read_reg(handle, REG_LR_OPMODE, &opmode);
+    if (err != ESP_OK) return err;
     opmode = (opmode & RFLR_OPMODE_MASK) | mode;
-    lora_write_reg_checked(handle, REG_LR_OPMODE, opmode);
+    err = lora_write_reg(handle, REG_LR_OPMODE, opmode);
+    if (err != ESP_OK) return err;
+    return ESP_OK;
 }
 
-void lora_set_mode_standby(spi_device_handle_t handle) {
-    lora_set_opmode(handle, RFLR_OPMODE_STANDBY);
+esp_err_t lora_set_mode_standby(spi_device_handle_t handle) {
+    esp_err_t err = lora_set_opmode(handle, RFLR_OPMODE_STANDBY);
+    if (err != ESP_OK) return err;
+    return ESP_OK;
 }
 
-void lora_set_mode_tx(spi_device_handle_t handle) {
-    lora_set_opmode(handle, RFLR_OPMODE_TRANSMITTER);
+esp_err_t lora_set_mode_tx(spi_device_handle_t handle) {
+    esp_err_t err = lora_set_opmode(handle, RFLR_OPMODE_TRANSMITTER);
+    if (err != ESP_OK) return err;
+    return ESP_OK;
 }
 
-void lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr) {
-    lora_write_reg_checked(handle, REG_LR_FIFOTXBASEADDR, addr);
-    lora_write_reg_checked(handle, REG_LR_FIFOADDRPTR, addr);
+esp_err_t lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr) {
+    esp_err_t err = lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, addr);
+    if (err != ESP_OK) return err;
+    err = lora_write_reg(handle, REG_LR_FIFOADDRPTR, addr);
+    if (err != ESP_OK) return err;
+    return ESP_OK;
 }
 
-void lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
-                     uint8_t len) {
-    lora_write_reg_checked(handle, REG_LR_PAYLOADLENGTH, len);
-
+esp_err_t lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
+                          uint8_t len) {
+    esp_err_t err = lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
+    if (err != ESP_OK) return err;
     for (int i = 0; i < len; i++) {
-        lora_write_reg_checked(handle, REG_LR_FIFO, buf[i]);
+        err = lora_write_reg(handle, REG_LR_FIFO, buf[i]);
+        if (err != ESP_OK) return err;
     }
+    return ESP_OK;
 }
 
 uint8_t lora_get_irq_flags(spi_device_handle_t handle) {
     return lora_read_reg_checked(handle, REG_LR_IRQFLAGS);
 }
 
-void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags) {
+esp_err_t lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags) {
     // Writing 1 to IRQ flags clears them (per datasheet)
-    lora_write_reg_checked(handle, REG_LR_IRQFLAGS, flags);
+    esp_err_t err = lora_write_reg(handle, REG_LR_IRQFLAGS, flags);
+    if (err != ESP_OK) return err;
+    return ESP_OK;
 }
 
 void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
