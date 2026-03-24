@@ -1,6 +1,7 @@
 #ifndef LORA_H
 #define LORA_H
 
+#include "esp_err.h"
 #include "sx1276_regs_lora.h"
 #include <driver/spi_master.h>
 #include <stdbool.h>
@@ -46,8 +47,8 @@ spi_device_handle_t lora_init();
 void lora_reset(void);
 
 // register access
-uint8_t lora_read_reg(spi_device_handle_t handle, uint8_t reg);
-void lora_write_reg(spi_device_handle_t handle, uint8_t reg, uint8_t value);
+esp_err_t lora_read_reg(spi_device_handle_t handle, uint8_t reg, uint8_t *out);
+esp_err_t lora_write_reg(spi_device_handle_t handle, uint8_t reg, uint8_t value);
 
 // frequency and power configuration
 float lora_get_freq(spi_device_handle_t handle);

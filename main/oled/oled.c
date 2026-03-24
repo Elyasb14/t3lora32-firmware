@@ -42,7 +42,6 @@ void oled_clear_display(oled_state_t *state) {
 
 void oled_fill_white(oled_state_t *state) {
     uint8_t white[OLED_COLS];
-
     memset(white, 0xFF, sizeof(white));
 
     for (int page = 0; page < OLED_PAGES; page++) {

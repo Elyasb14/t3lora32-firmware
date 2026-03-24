@@ -43,7 +43,7 @@ static void oled_task(void *arg) {
     }
 }
 
-void send_packet_manual(spi_device_handle_t handle, oled_state_t *oled);
+void send_packet_manual(spi_device_handle_t handle);
 
 void app_main() {
     printf("\n");
@@ -157,7 +157,7 @@ void app_main() {
     }
 }
 
-void send_packet_manual(spi_device_handle_t handle, oled_state_t *oled) {
+void send_packet_manual(spi_device_handle_t handle) {
     char *data = "hello";
     printf("Transmitting: '%s'\n", data);
 
