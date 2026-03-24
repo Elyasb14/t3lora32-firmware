@@ -3,7 +3,6 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 #include "sx1276_regs_lora.h"
-#include <assert.h>
 #include <freertos/task.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -215,29 +214,34 @@ void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
     lora_write_reg_checked(handle, REG_LR_DIOMAPPING1, current_mapping);
 }
 
-void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
-                      uint8_t len) {
+esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *pkt) {
+    if (!pkt || pkt->payload_len > LORA_MAX_PAYLOAD) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     lora_set_mode_standby(handle);
 
     lora_write_reg_checked(handle, REG_LR_FIFOTXBASEADDR, 0x00);
     lora_write_reg_checked(handle, REG_LR_FIFOADDRPTR, 0x00);
 
-    lora_write_reg_checked(handle, REG_LR_PAYLOADLENGTH, len);
+    lora_write_reg_checked(handle, REG_LR_PAYLOADLENGTH, pkt->payload_len + 3);
 
-    for (int i = 0; i < len; i++) {
-        lora_write_reg_checked(handle, REG_LR_FIFO, buf[i]);
+    uint8_t tx_len = (uint8_t)(3 + pkt->payload_len);
+    const uint8_t *raw = (const uint8_t *)pkt; // version/type/payload_len/payload...
+
+    for (int i = 0; i < tx_len; i++) {
+        lora_write_reg_checked(handle, REG_LR_FIFO, raw[i]);
     }
 
     lora_set_mode_tx(handle);
 
-    // Wait for TX_DONE interrupt (max timeout ~2 seconds)
+    // wait for TX_DONE interrupt (max timeout ~2 seconds)
     uint32_t timeout = 2000; // ms
     uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
     while ((lora_get_irq_flags(handle) & RFLR_IRQFLAGS_TXDONE) == 0) {
         if ((xTaskGetTickCount() * portTICK_PERIOD_MS - start) > timeout) {
-            // Timeout - abort
-            break;
+            return ESP_ERR_TIMEOUT;
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -245,6 +249,7 @@ void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
     lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
 
     lora_set_mode_standby(handle);
+    return ESP_OK;
 }
 
 void lora_set_mode_rx_single(spi_device_handle_t handle) {

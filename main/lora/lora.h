@@ -7,6 +7,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define LORA_MAX_PAYLOAD 200
+
+typedef struct __attribute__((packed)) {
+    uint8_t version;     // protocol compatibility
+    uint8_t type;        // message meaning (data/ack/etc.)
+    uint8_t payload_len; // how many payload bytes are valid
+    uint8_t payload[LORA_MAX_PAYLOAD];
+} lora_packet_t;
+
 // IRQ flag masks (from SX1276 datasheet)
 #define IRQ_TX_DONE_MASK RFLR_IRQFLAGS_TXDONE // 0x08
 #define IRQ_RX_DONE_MASK RFLR_IRQFLAGS_RXDONE // 0x40
@@ -74,8 +83,7 @@ void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags);
 void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode);
 
 // transmission
-void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
-                      uint8_t len);
+esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *packet);
 
 // reception mode helpers
 void lora_set_mode_rx_single(spi_device_handle_t handle);

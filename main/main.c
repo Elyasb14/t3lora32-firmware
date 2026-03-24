@@ -1,3 +1,4 @@
+#include "esp_err.h"
 #include "gpio/gpio.h"
 #include "i2c/i2c.h"
 #include "lora/lora.h"
@@ -99,7 +100,15 @@ void app_main() {
         if (uart_read_bytes(UART_PORT, &ch, 1, 0) > 0) {
             if (ch >= 32 && ch <= 126) {
                 printf("Manual TX Trigger received (char: %c)\n", ch);
-                send_packet_manual(handle);
+                const char *msg = "hello";
+                size_t msg_len = strlen(msg);
+                lora_packet_t pkt = {0};
+                pkt.version = 1;
+                pkt.type = 1;
+                pkt.payload_len = (uint8_t)msg_len;
+                memcpy(pkt.payload, msg, msg_len);
+
+                ESP_ERROR_CHECK(lora_send_packet(handle, &pkt));
             }
         }
 
@@ -155,24 +164,4 @@ void app_main() {
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-}
-
-void send_packet_manual(spi_device_handle_t handle) {
-    const char *data = "hello";
-    size_t data_len = strlen(data);
-    printf("Transmitting: '%s'\n", data);
-
-    lora_set_dio0_mapping(handle, true);
-
-    lora_set_mode_standby(handle);
-    ESP_ERROR_CHECK(lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00));
-    ESP_ERROR_CHECK(lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00));
-    ESP_ERROR_CHECK(lora_write_reg(handle, REG_LR_PAYLOADLENGTH, data_len));
-
-    for (size_t i = 0; i < data_len; i++) {
-        ESP_ERROR_CHECK(lora_write_reg(handle, REG_LR_FIFO, data[i]));
-    }
-
-    lora_set_mode_tx(handle);
-    printf("TX Mode Started, waiting for interrupt...\n");
 }
