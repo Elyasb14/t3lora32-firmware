@@ -12,6 +12,14 @@
 #define RST 23
 #define MISO 19
 
+#define CHECK(expr)              \
+    do {                         \
+        esp_err_t _err = (expr); \
+        if (_err != ESP_OK) {    \
+            return _err;         \
+        }                        \
+    } while (0)
+
 void lora_reset(void) {
     gpio_set_level(RST, 0);
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -123,18 +131,9 @@ esp_err_t lora_get_freq(spi_device_handle_t handle, float *freq_mhz_out) {
     uint8_t mid = 0;
     uint8_t lsb = 0;
 
-    esp_err_t err = lora_read_reg(handle, REG_LR_FRFMSB, &msb);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_read_reg(handle, REG_LR_FRFMID, &mid);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_read_reg(handle, REG_LR_FRFLSB, &lsb);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_FRFMSB, &msb));
+    CHECK(lora_read_reg(handle, REG_LR_FRFMID, &mid));
+    CHECK(lora_read_reg(handle, REG_LR_FRFLSB, &lsb));
 
     uint32_t frf = ((uint32_t)msb << 16) | ((uint32_t)mid << 8) | lsb;
     *freq_mhz_out = (float)frf * 61.03515625f / 1e6f;
@@ -144,15 +143,10 @@ esp_err_t lora_get_freq(spi_device_handle_t handle, float *freq_mhz_out) {
 esp_err_t lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
     uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
 
-    esp_err_t err = lora_write_reg(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_write_reg(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF);
-    if (err != ESP_OK) {
-        return err;
-    }
-    return lora_write_reg(handle, REG_LR_FRFLSB, frf & 0xFF);
+    CHECK(lora_write_reg(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF));
+    CHECK(lora_write_reg(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF));
+    CHECK(lora_write_reg(handle, REG_LR_FRFLSB, frf & 0xFF));
+    return ESP_OK;
 }
 
 esp_err_t lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm) {
@@ -177,10 +171,7 @@ esp_err_t lora_get_tx_power(spi_device_handle_t handle, uint8_t *dbm_out) {
     }
 
     uint8_t reg = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_PACONFIG, &reg);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_PACONFIG, &reg));
 
     *dbm_out = (reg & 0x0F) + 2;
     return ESP_OK;
@@ -188,13 +179,11 @@ esp_err_t lora_get_tx_power(spi_device_handle_t handle, uint8_t *dbm_out) {
 
 esp_err_t lora_set_opmode(spi_device_handle_t handle, uint8_t mode) {
     uint8_t opmode = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_OPMODE, &opmode);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_OPMODE, &opmode));
 
     opmode = (opmode & RFLR_OPMODE_MASK) | mode;
-    return lora_write_reg(handle, REG_LR_OPMODE, opmode);
+    CHECK(lora_write_reg(handle, REG_LR_OPMODE, opmode));
+    return ESP_OK;
 }
 
 esp_err_t lora_set_mode_standby(spi_device_handle_t handle) {
@@ -206,25 +195,17 @@ esp_err_t lora_set_mode_tx(spi_device_handle_t handle) {
 }
 
 esp_err_t lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr) {
-    esp_err_t err = lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, addr);
-    if (err != ESP_OK) {
-        return err;
-    }
-    return lora_write_reg(handle, REG_LR_FIFOADDRPTR, addr);
+    CHECK(lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, addr));
+    CHECK(lora_write_reg(handle, REG_LR_FIFOADDRPTR, addr));
+    return ESP_OK;
 }
 
 esp_err_t lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
                           uint8_t len) {
-    esp_err_t err = lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len));
 
     for (uint8_t i = 0; i < len; i++) {
-        err = lora_write_reg(handle, REG_LR_FIFO, buf[i]);
-        if (err != ESP_OK) {
-            return err;
-        }
+        CHECK(lora_write_reg(handle, REG_LR_FIFO, buf[i]));
     }
 
     return ESP_OK;
@@ -240,10 +221,7 @@ esp_err_t lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags) {
 
 esp_err_t lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
     uint8_t current_mapping = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_DIOMAPPING1, &current_mapping);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_DIOMAPPING1, &current_mapping));
 
     current_mapping &= RFLR_DIOMAPPING1_DIO0_MASK;
     if (tx_mode) {
@@ -252,7 +230,8 @@ esp_err_t lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
         current_mapping |= RFLR_DIOMAPPING1_DIO0_00;
     }
 
-    return lora_write_reg(handle, REG_LR_DIOMAPPING1, current_mapping);
+    CHECK(lora_write_reg(handle, REG_LR_DIOMAPPING1, current_mapping));
+    return ESP_OK;
 }
 
 esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *pkt) {
@@ -260,43 +239,24 @@ esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *pkt)
         return ESP_ERR_INVALID_ARG;
     }
 
-    esp_err_t err = lora_set_mode_standby(handle);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    err = lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_write_reg(handle, REG_LR_PAYLOADLENGTH, pkt->payload_len + 3);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_set_mode_standby(handle));
+    CHECK(lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00));
+    CHECK(lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00));
+    CHECK(lora_write_reg(handle, REG_LR_PAYLOADLENGTH, pkt->payload_len + 3));
 
     uint8_t tx_len = (uint8_t)(3 + pkt->payload_len);
     const uint8_t *raw = (const uint8_t *)pkt;
     for (uint8_t i = 0; i < tx_len; i++) {
-        err = lora_write_reg(handle, REG_LR_FIFO, raw[i]);
-        if (err != ESP_OK) {
-            return err;
-        }
+        CHECK(lora_write_reg(handle, REG_LR_FIFO, raw[i]));
     }
 
-    err = lora_set_mode_tx(handle);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_set_mode_tx(handle));
 
     uint32_t timeout_ms = 2000;
     uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
     while (1) {
         uint8_t flags = 0;
-        err = lora_get_irq_flags(handle, &flags);
+        esp_err_t err = lora_get_irq_flags(handle, &flags);
         if (err != ESP_OK) {
             lora_set_mode_standby(handle);
             return err;
@@ -314,7 +274,7 @@ esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *pkt)
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 
-    err = lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
+    esp_err_t err = lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
     if (err != ESP_OK) {
         lora_set_mode_standby(handle);
         return err;
@@ -324,35 +284,19 @@ esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *pkt)
 }
 
 esp_err_t lora_set_mode_rx_single(spi_device_handle_t handle) {
-    esp_err_t err = lora_set_mode_standby(handle);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
-    if (err != ESP_OK) {
-        return err;
-    }
-    return lora_set_opmode(handle, RFLR_OPMODE_RECEIVER_SINGLE);
+    CHECK(lora_set_mode_standby(handle));
+    CHECK(lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00));
+    CHECK(lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00));
+    CHECK(lora_set_opmode(handle, RFLR_OPMODE_RECEIVER_SINGLE));
+    return ESP_OK;
 }
 
 esp_err_t lora_set_mode_rx_continuous(spi_device_handle_t handle) {
-    esp_err_t err = lora_set_mode_standby(handle);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
-    if (err != ESP_OK) {
-        return err;
-    }
-    err = lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
-    if (err != ESP_OK) {
-        return err;
-    }
-    return lora_set_opmode(handle, RFLR_OPMODE_RECEIVER);
+    CHECK(lora_set_mode_standby(handle));
+    CHECK(lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00));
+    CHECK(lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00));
+    CHECK(lora_set_opmode(handle, RFLR_OPMODE_RECEIVER));
+    return ESP_OK;
 }
 
 esp_err_t lora_is_packet_received(spi_device_handle_t handle,
@@ -362,10 +306,7 @@ esp_err_t lora_is_packet_received(spi_device_handle_t handle,
     }
 
     uint8_t flags = 0;
-    esp_err_t err = lora_get_irq_flags(handle, &flags);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_get_irq_flags(handle, &flags));
 
     *received_out = (flags & RFLR_IRQFLAGS_RXDONE) != 0;
     return ESP_OK;
@@ -377,10 +318,7 @@ esp_err_t lora_is_crc_error(spi_device_handle_t handle, bool *crc_error_out) {
     }
 
     uint8_t flags = 0;
-    esp_err_t err = lora_get_irq_flags(handle, &flags);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_get_irq_flags(handle, &flags));
 
     *crc_error_out = (flags & RFLR_IRQFLAGS_PAYLOADCRCERROR) != 0;
     return ESP_OK;
@@ -397,10 +335,7 @@ esp_err_t lora_read_fifo_payload(spi_device_handle_t handle, uint8_t *buf,
     }
 
     for (uint8_t i = 0; i < len; i++) {
-        esp_err_t err = lora_read_reg(handle, REG_LR_FIFO, &buf[i]);
-        if (err != ESP_OK) {
-            return err;
-        }
+        CHECK(lora_read_reg(handle, REG_LR_FIFO, &buf[i]));
     }
 
     return ESP_OK;
@@ -485,13 +420,11 @@ int16_t lora_receive_packet(spi_device_handle_t handle, uint8_t *buf,
 
 esp_err_t lora_set_bandwidth(spi_device_handle_t handle, lora_bandwidth_t bw) {
     uint8_t reg = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_MODEMCONFIG1, &reg);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_MODEMCONFIG1, &reg));
 
     reg = (reg & RFLR_MODEMCONFIG1_BW_MASK) | bw;
-    return lora_write_reg(handle, REG_LR_MODEMCONFIG1, reg);
+    CHECK(lora_write_reg(handle, REG_LR_MODEMCONFIG1, reg));
+    return ESP_OK;
 }
 
 esp_err_t lora_get_bandwidth(spi_device_handle_t handle,
@@ -501,10 +434,7 @@ esp_err_t lora_get_bandwidth(spi_device_handle_t handle,
     }
 
     uint8_t val = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_MODEMCONFIG1, &val);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_MODEMCONFIG1, &val));
 
     val &= 0xF0;
     *bw_out = (lora_bandwidth_t)val;
@@ -513,13 +443,11 @@ esp_err_t lora_get_bandwidth(spi_device_handle_t handle,
 
 esp_err_t lora_set_coding_rate(spi_device_handle_t handle, lora_coding_rate_t cr) {
     uint8_t reg = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_MODEMCONFIG1, &reg);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_MODEMCONFIG1, &reg));
 
     reg = (reg & RFLR_MODEMCONFIG1_CODINGRATE_MASK) | cr;
-    return lora_write_reg(handle, REG_LR_MODEMCONFIG1, reg);
+    CHECK(lora_write_reg(handle, REG_LR_MODEMCONFIG1, reg));
+    return ESP_OK;
 }
 
 esp_err_t lora_get_coding_rate(spi_device_handle_t handle,
@@ -529,10 +457,7 @@ esp_err_t lora_get_coding_rate(spi_device_handle_t handle,
     }
 
     uint8_t val = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_MODEMCONFIG1, &val);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_MODEMCONFIG1, &val));
 
     val &= 0x0E;
     *cr_out = (lora_coding_rate_t)val;
@@ -542,13 +467,11 @@ esp_err_t lora_get_coding_rate(spi_device_handle_t handle,
 esp_err_t lora_set_spreading_factor(spi_device_handle_t handle,
                                     lora_spreading_factor_t sf) {
     uint8_t reg = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_MODEMCONFIG2, &reg);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_MODEMCONFIG2, &reg));
 
     reg = (reg & RFLR_MODEMCONFIG2_SF_MASK) | sf;
-    return lora_write_reg(handle, REG_LR_MODEMCONFIG2, reg);
+    CHECK(lora_write_reg(handle, REG_LR_MODEMCONFIG2, reg));
+    return ESP_OK;
 }
 
 esp_err_t lora_get_spreading_factor(spi_device_handle_t handle,
@@ -558,10 +481,7 @@ esp_err_t lora_get_spreading_factor(spi_device_handle_t handle,
     }
 
     uint8_t val = 0;
-    esp_err_t err = lora_read_reg(handle, REG_LR_MODEMCONFIG2, &val);
-    if (err != ESP_OK) {
-        return err;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_MODEMCONFIG2, &val));
 
     val &= 0xF0;
     *sf_out = (lora_spreading_factor_t)val;
