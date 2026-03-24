@@ -12,7 +12,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define TX_TRIGGER_CHAR 't'
 #define UART_PORT UART_NUM_0
 #define OLED_TASK_INTERVAL_MS 10
 #define OLED_SHIFT_INTERVAL_TICKS 500
@@ -44,8 +43,6 @@ static void oled_task(void *arg) {
     }
 }
 
-void send_packet_manual(spi_device_handle_t handle);
-
 void app_main() {
     printf("\n");
     uart_config_t uart_config = {
@@ -63,18 +60,29 @@ void app_main() {
     oled_state_t oled = oled_init(i2c_handle);
 
     spi_device_handle_t handle = lora_init();
+    if (handle == NULL) {
+        printf("LoRa init failed\n");
+        return;
+    }
 
-    lora_set_tx_power(handle, 1);
-    lora_set_frequency(handle, 903000000);
-    lora_set_bandwidth(handle, LORA_BW_125_KHZ);
+    ESP_ERROR_CHECK(lora_set_tx_power(handle, 1));
+    ESP_ERROR_CHECK(lora_set_frequency(handle, 903000000));
+    ESP_ERROR_CHECK(lora_set_bandwidth(handle, LORA_BW_125_KHZ));
 
     char bw_buffer[32];
     char tx_buffer[32];
     char freq_buffer[32];
 
-    snprintf(bw_buffer, sizeof(bw_buffer), "BW: %d kHz", lora_get_bandwidth(handle));
-    snprintf(tx_buffer, sizeof(tx_buffer), "TX: %d dBm", lora_get_tx_power(handle));
-    snprintf(freq_buffer, sizeof(freq_buffer), "Freq: %.2f MHz", lora_get_freq(handle));
+    lora_bandwidth_t bw;
+    uint8_t tx_dbm;
+    float freq_mhz;
+    ESP_ERROR_CHECK(lora_get_bandwidth(handle, &bw));
+    ESP_ERROR_CHECK(lora_get_tx_power(handle, &tx_dbm));
+    ESP_ERROR_CHECK(lora_get_freq(handle, &freq_mhz));
+
+    snprintf(bw_buffer, sizeof(bw_buffer), "BW: %d kHz", bw);
+    snprintf(tx_buffer, sizeof(tx_buffer), "TX: %d dBm", tx_dbm);
+    snprintf(freq_buffer, sizeof(freq_buffer), "Freq: %.2f MHz", freq_mhz);
 
     oled_clear_pages(&oled);
     oled_set_text(&oled, 2, "mesh repeater");
@@ -88,9 +96,8 @@ void app_main() {
     gpio_init_interrupt();
     printf("GPIO Interrupt Initialized\n");
 
-    lora_set_dio0_mapping(handle, false);
-
-    lora_set_mode_rx_continuous(handle);
+    ESP_ERROR_CHECK(lora_set_dio0_mapping(handle, false));
+    ESP_ERROR_CHECK(lora_set_mode_rx_continuous(handle));
     printf("Entering RX Continuous Mode...\n");
 
     uint8_t rx_buf[256];
@@ -113,18 +120,30 @@ void app_main() {
         }
 
         if (gpio_check_dio0_and_clear()) {
-            uint8_t flags = lora_get_irq_flags(handle);
+            uint8_t flags = 0;
+            if (lora_get_irq_flags(handle, &flags) != ESP_OK) {
+                printf("Failed reading IRQ flags\n");
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
 
             if (flags & RFLR_IRQFLAGS_RXDONE) {
                 gpio_blink_led();
 
-                uint8_t rx_len = lora_get_rx_payload_length(handle);
+                uint8_t rx_len = 0;
+                if (lora_get_rx_payload_length(handle, &rx_len) != ESP_OK) {
+                    printf("Failed reading RX length\n");
+                    continue;
+                }
                 uint16_t bytes_to_read = rx_len;
                 if (bytes_to_read > sizeof(rx_buf)) {
                     bytes_to_read = sizeof(rx_buf);
                 }
 
-                lora_read_fifo_payload(handle, rx_buf, (uint8_t)bytes_to_read);
+                if (lora_read_fifo_payload(handle, rx_buf, (uint8_t)bytes_to_read) != ESP_OK) {
+                    printf("Failed reading RX payload\n");
+                    continue;
+                }
 
                 printf("Received %d bytes (Hex): ", bytes_to_read);
                 for (int i = 0; i < bytes_to_read; i++) {
@@ -142,23 +161,33 @@ void app_main() {
                 }
                 printf("'\n");
 
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE);
+                if (lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE) != ESP_OK) {
+                    printf("Failed clearing RXDONE\n");
+                }
             }
 
             if (flags & RFLR_IRQFLAGS_TXDONE) {
                 gpio_blink_led();
                 printf("Packet sent successfully (TX Done Interrupt)\n");
 
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
+                if (lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE) != ESP_OK) {
+                    printf("Failed clearing TXDONE\n");
+                }
 
-                lora_set_dio0_mapping(handle, false);
-                lora_set_mode_rx_continuous(handle);
+                if (lora_set_dio0_mapping(handle, false) != ESP_OK) {
+                    printf("Failed setting DIO mapping\n");
+                }
+                if (lora_set_mode_rx_continuous(handle) != ESP_OK) {
+                    printf("Failed returning RX continuous\n");
+                }
                 printf("Returned to RX Continuous Mode\n");
             }
 
             if (flags & RFLR_IRQFLAGS_PAYLOADCRCERROR) {
                 printf("CRC Error in received packet\n");
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_PAYLOADCRCERROR);
+                if (lora_clear_irq_flags(handle, RFLR_IRQFLAGS_PAYLOADCRCERROR) != ESP_OK) {
+                    printf("Failed clearing CRC error flag\n");
+                }
             }
         }
 

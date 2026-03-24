@@ -60,10 +60,10 @@ esp_err_t lora_read_reg(spi_device_handle_t handle, uint8_t reg, uint8_t *out);
 esp_err_t lora_write_reg(spi_device_handle_t handle, uint8_t reg, uint8_t value);
 
 // frequency and power configuration
-float lora_get_freq(spi_device_handle_t handle);
-uint8_t lora_get_tx_power(spi_device_handle_t handle);
-void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz);
-void lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm);
+esp_err_t lora_get_freq(spi_device_handle_t handle, float *freq_mhz_out);
+esp_err_t lora_get_tx_power(spi_device_handle_t handle, uint8_t *dbm_out);
+esp_err_t lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz);
+esp_err_t lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm);
 
 // FIFO operations
 esp_err_t lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr);
@@ -78,31 +78,36 @@ esp_err_t lora_set_mode_standby(spi_device_handle_t handle);
 esp_err_t lora_set_mode_tx(spi_device_handle_t handle);
 
 // IRQ handling
-uint8_t lora_get_irq_flags(spi_device_handle_t handle);
-void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags);
-void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode);
+esp_err_t lora_get_irq_flags(spi_device_handle_t handle, uint8_t *flags_out);
+esp_err_t lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags);
+esp_err_t lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode);
 
 // transmission
 esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *packet);
 
 // reception mode helpers
-void lora_set_mode_rx_single(spi_device_handle_t handle);
-void lora_set_mode_rx_continuous(spi_device_handle_t handle);
-bool lora_is_packet_received(spi_device_handle_t handle);
-bool lora_is_crc_error(spi_device_handle_t handle);
-uint8_t lora_get_rx_payload_length(spi_device_handle_t handle);
-void lora_read_fifo_payload(spi_device_handle_t handle, uint8_t *buf, uint8_t len);
-void lora_clear_rx_flags(spi_device_handle_t handle);
+esp_err_t lora_set_mode_rx_single(spi_device_handle_t handle);
+esp_err_t lora_set_mode_rx_continuous(spi_device_handle_t handle);
+esp_err_t lora_is_packet_received(spi_device_handle_t handle, bool *received_out);
+esp_err_t lora_is_crc_error(spi_device_handle_t handle, bool *crc_error_out);
+esp_err_t lora_get_rx_payload_length(spi_device_handle_t handle, uint8_t *len_out);
+esp_err_t lora_read_fifo_payload(spi_device_handle_t handle, uint8_t *buf,
+                                 uint8_t len);
+esp_err_t lora_clear_rx_flags(spi_device_handle_t handle);
 
 // reception
 int16_t lora_receive_packet(spi_device_handle_t handle, uint8_t *buf,
                             uint16_t buf_size, uint32_t timeout_ms);
 
-void lora_set_bandwidth(spi_device_handle_t handle, lora_bandwidth_t bw);
-lora_bandwidth_t lora_get_bandwidth(spi_device_handle_t handle);
-void lora_set_spreading_factor(spi_device_handle_t handle, lora_spreading_factor_t sf);
-lora_spreading_factor_t lora_get_spreading_factor(spi_device_handle_t handle);
-void lora_set_coding_rate(spi_device_handle_t handle, lora_coding_rate_t cr);
-lora_coding_rate_t lora_get_coding_rate(spi_device_handle_t handle);
+esp_err_t lora_set_bandwidth(spi_device_handle_t handle, lora_bandwidth_t bw);
+esp_err_t lora_get_bandwidth(spi_device_handle_t handle,
+                             lora_bandwidth_t *bw_out);
+esp_err_t lora_set_spreading_factor(spi_device_handle_t handle,
+                                    lora_spreading_factor_t sf);
+esp_err_t lora_get_spreading_factor(spi_device_handle_t handle,
+                                    lora_spreading_factor_t *sf_out);
+esp_err_t lora_set_coding_rate(spi_device_handle_t handle, lora_coding_rate_t cr);
+esp_err_t lora_get_coding_rate(spi_device_handle_t handle,
+                               lora_coding_rate_t *cr_out);
 
 #endif // LORA_H
