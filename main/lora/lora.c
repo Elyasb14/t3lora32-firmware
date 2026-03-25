@@ -7,6 +7,7 @@
 #include <freertos/task.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #define MOSI 27
 #define SCLK 5
@@ -199,34 +200,50 @@ void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
 
 void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
                       uint8_t len) {
-    lora_set_mode_standby(handle);
 
+    printf("Transmitting: '%s'\n", buf);
+
+    lora_set_dio0_mapping(handle, true);
+
+    lora_set_mode_standby(handle);
     lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
     lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
+    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, strlen((char *)buf));
 
-    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
-
-    for (int i = 0; i < len; i++) {
+    for (int i = 0; i < strlen((char *)buf); i++) {
         lora_write_reg(handle, REG_LR_FIFO, buf[i]);
     }
 
     lora_set_mode_tx(handle);
-
-    // Wait for TX_DONE interrupt (max timeout ~2 seconds)
-    uint32_t timeout = 2000; // ms
-    uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
-
-    while ((lora_get_irq_flags(handle) & RFLR_IRQFLAGS_TXDONE) == 0) {
-        if ((xTaskGetTickCount() * portTICK_PERIOD_MS - start) > timeout) {
-            // Timeout - abort
-            break;
-        }
-        vTaskDelay(pdMS_TO_TICKS(1));
-    }
-
-    lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
-
-    lora_set_mode_standby(handle);
+    printf("TX Mode Started, waiting for interrupt...\n");
+    // lora_set_mode_standby(handle);
+    //
+    // lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
+    // lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
+    //
+    // lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
+    //
+    // for (int i = 0; i < len; i++) {
+    //     lora_write_reg(handle, REG_LR_FIFO, buf[i]);
+    // }
+    //
+    // lora_set_mode_tx(handle);
+    //
+    // // Wait for TX_DONE interrupt (max timeout ~2 seconds)
+    // uint32_t timeout = 2000; // ms
+    // uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    //
+    // while ((lora_get_irq_flags(handle) & RFLR_IRQFLAGS_TXDONE) == 0) {
+    //     if ((xTaskGetTickCount() * portTICK_PERIOD_MS - start) > timeout) {
+    //         // Timeout - abort
+    //         break;
+    //     }
+    //     vTaskDelay(pdMS_TO_TICKS(1));
+    // }
+    //
+    // lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
+    //
+    // lora_set_mode_standby(handle);
 }
 
 void lora_set_mode_rx_single(spi_device_handle_t handle) {

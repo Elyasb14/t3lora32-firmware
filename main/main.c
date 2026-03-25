@@ -43,8 +43,6 @@ static void oled_task(void *arg) {
     }
 }
 
-void send_packet_manual(spi_device_handle_t handle);
-
 void app_main() {
     printf("\n");
     uart_config_t uart_config = {
@@ -99,7 +97,8 @@ void app_main() {
         if (uart_read_bytes(UART_PORT, &ch, 1, 0) > 0) {
             if (ch >= 32 && ch <= 126) {
                 printf("Manual TX Trigger received (char: %c)\n", ch);
-                send_packet_manual(handle);
+                const char *data = "hello";
+                lora_send_packet(handle, (const uint8_t *)data, strlen(data));
             }
         }
 
@@ -155,23 +154,4 @@ void app_main() {
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-}
-
-void send_packet_manual(spi_device_handle_t handle) {
-    char *data = "hello";
-    printf("Transmitting: '%s'\n", data);
-
-    lora_set_dio0_mapping(handle, true);
-
-    lora_set_mode_standby(handle);
-    lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
-    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
-    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, strlen(data));
-
-    for (int i = 0; i < strlen(data); i++) {
-        lora_write_reg(handle, REG_LR_FIFO, data[i]);
-    }
-
-    lora_set_mode_tx(handle);
-    printf("TX Mode Started, waiting for interrupt...\n");
 }
