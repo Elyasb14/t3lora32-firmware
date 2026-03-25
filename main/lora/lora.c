@@ -3,6 +3,7 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 #include "sx1276_regs_lora.h"
+#include <assert.h>
 #include <freertos/task.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -43,11 +44,7 @@ spi_device_handle_t _lora_spi_init() {
     return lora_spi;
 }
 
-esp_err_t lora_read_reg(spi_device_handle_t handle, uint8_t reg, uint8_t *out) {
-    if (out == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
+uint8_t lora_read_reg(spi_device_handle_t handle, uint8_t reg) {
     spi_transaction_t t = {0};
 
     uint8_t tx[2] = {reg & 0x7F, 0};
@@ -57,17 +54,12 @@ esp_err_t lora_read_reg(spi_device_handle_t handle, uint8_t reg, uint8_t *out) {
     t.tx_buffer = tx;
     t.rx_buffer = rx;
 
-    esp_err_t err = spi_device_transmit(handle, &t);
-    if (err != ESP_OK) {
-        return err;
-    }
+    spi_device_transmit(handle, &t);
 
-    *out = rx[1];
-    return ESP_OK;
+    return rx[1];
 }
 
-esp_err_t lora_write_reg(spi_device_handle_t handle, uint8_t reg,
-                         uint8_t value) {
+void lora_write_reg(spi_device_handle_t handle, uint8_t reg, uint8_t value) {
     spi_transaction_t t = {0};
 
     uint8_t tx[2] = {reg | 0x80, value};
@@ -75,31 +67,10 @@ esp_err_t lora_write_reg(spi_device_handle_t handle, uint8_t reg,
     t.length = 16;
     t.tx_buffer = tx;
 
-    return spi_device_transmit(handle, &t);
+    spi_device_transmit(handle, &t);
 }
 
-static uint8_t lora_read_reg_checked(spi_device_handle_t handle, uint8_t reg) {
-    uint8_t value = 0;
-    ESP_ERROR_CHECK(lora_read_reg(handle, reg, &value));
-    return value;
-}
-
-static void lora_write_reg_checked(spi_device_handle_t handle, uint8_t reg,
-                                   uint8_t value) {
-    ESP_ERROR_CHECK(lora_write_reg(handle, reg, value));
-}
-
-// https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
-// Formula: Frf = (Freq * 2^19) / Fxosc
-// Fxosc = 32 MHz (SX1276 crystal frequency)
-void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
-    uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
-
-    lora_write_reg_checked(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF);
-    lora_write_reg_checked(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF);
-    lora_write_reg_checked(handle, REG_LR_FRFLSB, frf & 0xFF);
-}
-
+void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz);
 spi_device_handle_t lora_init() {
     gpio_config_t io_conf = {
         .mode = GPIO_MODE_OUTPUT,
@@ -112,24 +83,37 @@ spi_device_handle_t lora_init() {
     lora_reset();
 
     // LoRa mode
-    lora_write_reg_checked(handle, REG_LR_OPMODE, 0x80);
+    lora_write_reg(handle, REG_LR_OPMODE, 0x80);
 
     // default freq is 915 mhz
-    lora_write_reg_checked(handle, REG_LR_FRFMSB, 0xE4);
-    lora_write_reg_checked(handle, REG_LR_FRFMID, 0xC0);
-    lora_write_reg_checked(handle, REG_LR_FRFLSB, 0x00);
+    lora_write_reg(handle, REG_LR_FRFMSB, 0xE4);
+    lora_write_reg(handle, REG_LR_FRFMID, 0xC0);
+    lora_write_reg(handle, REG_LR_FRFLSB, 0x00);
     // standby
-    lora_write_reg_checked(handle, REG_LR_OPMODE, 0x81);
+    lora_write_reg(handle, REG_LR_OPMODE, 0x81);
 
+    uint8_t v = lora_read_reg(handle, REG_LR_VERSION);
+    assert(v == 0x12 || v == 0x11);
     return handle;
 }
 
 float lora_get_freq(spi_device_handle_t handle) {
-    uint32_t frf = (lora_read_reg_checked(handle, REG_LR_FRFMSB) << 16) |
-                   (lora_read_reg_checked(handle, REG_LR_FRFMID) << 8) |
-                   (lora_read_reg_checked(handle, REG_LR_FRFLSB));
+    uint32_t frf = (lora_read_reg(handle, REG_LR_FRFMSB) << 16) |
+                   (lora_read_reg(handle, REG_LR_FRFMID) << 8) |
+                   (lora_read_reg(handle, REG_LR_FRFLSB));
 
     return (float)frf * 61.03515625 / 1e6;
+}
+
+// https://cdn-shop.adafruit.com/product-files/5714/SX1276-7-8.pdf page 32
+// Formula: Frf = (Freq * 2^19) / Fxosc
+// Fxosc = 32 MHz (SX1276 crystal frequency)
+void lora_set_frequency(spi_device_handle_t handle, uint32_t freq_hz) {
+    uint32_t frf = ((uint64_t)freq_hz << 19) / 32000000;
+
+    lora_write_reg(handle, REG_LR_FRFMSB, (frf >> 16) & 0xFF);
+    lora_write_reg(handle, REG_LR_FRFMID, (frf >> 8) & 0xFF);
+    lora_write_reg(handle, REG_LR_FRFLSB, frf & 0xFF);
 }
 
 void lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm) {
@@ -149,20 +133,20 @@ void lora_set_tx_power(spi_device_handle_t handle, uint8_t dbm) {
     // Set OutputPower (bits 3-0): Pout = dbm - 2
     pa_config |= (dbm - 2);
 
-    lora_write_reg_checked(handle, REG_LR_PACONFIG, pa_config);
+    lora_write_reg(handle, REG_LR_PACONFIG, pa_config);
 }
 
 uint8_t lora_get_tx_power(spi_device_handle_t handle) {
-    uint8_t reg = lora_read_reg_checked(handle, REG_LR_PACONFIG);
+    uint8_t reg = lora_read_reg(handle, REG_LR_PACONFIG);
     return (reg & 0x0F) + 2; // power is lower 4 bits of PaConfig register,
                              // convert it to dbm by adding 2
 }
 
 // Helper function to set operation mode using datasheet constants
 void lora_set_opmode(spi_device_handle_t handle, uint8_t mode) {
-    uint8_t opmode = lora_read_reg_checked(handle, REG_LR_OPMODE);
+    uint8_t opmode = lora_read_reg(handle, REG_LR_OPMODE);
     opmode = (opmode & RFLR_OPMODE_MASK) | mode;
-    lora_write_reg_checked(handle, REG_LR_OPMODE, opmode);
+    lora_write_reg(handle, REG_LR_OPMODE, opmode);
 }
 
 void lora_set_mode_standby(spi_device_handle_t handle) {
@@ -174,30 +158,30 @@ void lora_set_mode_tx(spi_device_handle_t handle) {
 }
 
 void lora_set_fifo_tx_base_addr(spi_device_handle_t handle, uint8_t addr) {
-    lora_write_reg_checked(handle, REG_LR_FIFOTXBASEADDR, addr);
-    lora_write_reg_checked(handle, REG_LR_FIFOADDRPTR, addr);
+    lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, addr);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, addr);
 }
 
 void lora_write_fifo(spi_device_handle_t handle, const uint8_t *buf,
                      uint8_t len) {
-    lora_write_reg_checked(handle, REG_LR_PAYLOADLENGTH, len);
+    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
 
     for (int i = 0; i < len; i++) {
-        lora_write_reg_checked(handle, REG_LR_FIFO, buf[i]);
+        lora_write_reg(handle, REG_LR_FIFO, buf[i]);
     }
 }
 
 uint8_t lora_get_irq_flags(spi_device_handle_t handle) {
-    return lora_read_reg_checked(handle, REG_LR_IRQFLAGS);
+    return lora_read_reg(handle, REG_LR_IRQFLAGS);
 }
 
 void lora_clear_irq_flags(spi_device_handle_t handle, uint8_t flags) {
     // Writing 1 to IRQ flags clears them (per datasheet)
-    lora_write_reg_checked(handle, REG_LR_IRQFLAGS, flags);
+    lora_write_reg(handle, REG_LR_IRQFLAGS, flags);
 }
 
 void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
-    uint8_t current_mapping = lora_read_reg_checked(handle, REG_LR_DIOMAPPING1);
+    uint8_t current_mapping = lora_read_reg(handle, REG_LR_DIOMAPPING1);
 
     // Clear DIO0 bits (bits 6-7)
     current_mapping &= RFLR_DIOMAPPING1_DIO0_MASK;
@@ -210,34 +194,32 @@ void lora_set_dio0_mapping(spi_device_handle_t handle, bool tx_mode) {
         current_mapping |= RFLR_DIOMAPPING1_DIO0_00;
     }
 
-    lora_write_reg_checked(handle, REG_LR_DIOMAPPING1, current_mapping);
+    lora_write_reg(handle, REG_LR_DIOMAPPING1, current_mapping);
 }
 
-esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *pkt) {
-    if (!pkt || pkt->payload_len > LORA_MAX_PAYLOAD) return ESP_ERR_INVALID_ARG;
-
+void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
+                      uint8_t len) {
     lora_set_mode_standby(handle);
 
-    lora_write_reg_checked(handle, REG_LR_FIFOTXBASEADDR, 0x00);
-    lora_write_reg_checked(handle, REG_LR_FIFOADDRPTR, 0x00);
-    lora_write_reg_checked(handle, REG_LR_PAYLOADLENGTH, pkt->payload_len + 3);
+    lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
 
-    uint8_t tx_len = (uint8_t)(3 + pkt->payload_len);
-    const uint8_t *raw = (const uint8_t *)pkt; // version/type/payload_len/payload...
+    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
 
-    for (int i = 0; i < tx_len; i++) {
-        lora_write_reg_checked(handle, REG_LR_FIFO, raw[i]);
+    for (int i = 0; i < len; i++) {
+        lora_write_reg(handle, REG_LR_FIFO, buf[i]);
     }
 
     lora_set_mode_tx(handle);
 
-    // wait for TX_DONE interrupt (max timeout ~2 seconds)
+    // Wait for TX_DONE interrupt (max timeout ~2 seconds)
     uint32_t timeout = 2000; // ms
     uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
     while ((lora_get_irq_flags(handle) & RFLR_IRQFLAGS_TXDONE) == 0) {
         if ((xTaskGetTickCount() * portTICK_PERIOD_MS - start) > timeout) {
-            return ESP_ERR_TIMEOUT;
+            // Timeout - abort
+            break;
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -245,20 +227,19 @@ esp_err_t lora_send_packet(spi_device_handle_t handle, const lora_packet_t *pkt)
     lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
 
     lora_set_mode_standby(handle);
-    return ESP_OK;
 }
 
 void lora_set_mode_rx_single(spi_device_handle_t handle) {
     lora_set_mode_standby(handle);
-    lora_write_reg_checked(handle, REG_LR_FIFORXBASEADDR, 0x00);
-    lora_write_reg_checked(handle, REG_LR_FIFOADDRPTR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
     lora_set_opmode(handle, RFLR_OPMODE_RECEIVER_SINGLE);
 }
 
 void lora_set_mode_rx_continuous(spi_device_handle_t handle) {
     lora_set_mode_standby(handle);
-    lora_write_reg_checked(handle, REG_LR_FIFORXBASEADDR, 0x00);
-    lora_write_reg_checked(handle, REG_LR_FIFOADDRPTR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFORXBASEADDR, 0x00);
+    lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
     lora_set_opmode(handle, RFLR_OPMODE_RECEIVER);
 }
 
@@ -271,12 +252,12 @@ bool lora_is_crc_error(spi_device_handle_t handle) {
 }
 
 uint8_t lora_get_rx_payload_length(spi_device_handle_t handle) {
-    return lora_read_reg_checked(handle, REG_LR_RXNBBYTES);
+    return lora_read_reg(handle, REG_LR_RXNBBYTES);
 }
 
 void lora_read_fifo_payload(spi_device_handle_t handle, uint8_t *buf, uint8_t len) {
     for (int i = 0; i < len; i++) {
-        buf[i] = lora_read_reg_checked(handle, REG_LR_FIFO);
+        buf[i] = lora_read_reg(handle, REG_LR_FIFO);
     }
 }
 
@@ -328,37 +309,37 @@ int16_t lora_receive_packet(spi_device_handle_t handle, uint8_t *buf,
 }
 
 void lora_set_bandwidth(spi_device_handle_t handle, lora_bandwidth_t bw) {
-    uint8_t reg = lora_read_reg_checked(handle, REG_LR_MODEMCONFIG1);
+    uint8_t reg = lora_read_reg(handle, REG_LR_MODEMCONFIG1);
     reg = (reg & RFLR_MODEMCONFIG1_BW_MASK) | bw;
-    lora_write_reg_checked(handle, REG_LR_MODEMCONFIG1, reg);
+    lora_write_reg(handle, REG_LR_MODEMCONFIG1, reg);
 }
 
 lora_bandwidth_t lora_get_bandwidth(spi_device_handle_t handle) {
-    uint8_t val = lora_read_reg_checked(handle, REG_LR_MODEMCONFIG1);
+    uint8_t val = lora_read_reg(handle, REG_LR_MODEMCONFIG1);
     val &= 0xf0;
     return (lora_bandwidth_t)val;
 }
 
 void lora_set_coding_rate(spi_device_handle_t handle, lora_coding_rate_t cr) {
-    uint8_t reg = lora_read_reg_checked(handle, REG_LR_MODEMCONFIG1);
+    uint8_t reg = lora_read_reg(handle, REG_LR_MODEMCONFIG1);
     reg = (reg & RFLR_MODEMCONFIG1_CODINGRATE_MASK) | cr;
-    lora_write_reg_checked(handle, REG_LR_MODEMCONFIG1, reg);
+    lora_write_reg(handle, REG_LR_MODEMCONFIG1, reg);
 }
 
 void lora_set_spreading_factor(spi_device_handle_t handle, lora_spreading_factor_t sf) {
-    uint8_t reg = lora_read_reg_checked(handle, REG_LR_MODEMCONFIG2);
+    uint8_t reg = lora_read_reg(handle, REG_LR_MODEMCONFIG2);
     reg = (reg & RFLR_MODEMCONFIG2_SF_MASK) | sf;
-    lora_write_reg_checked(handle, REG_LR_MODEMCONFIG2, reg);
+    lora_write_reg(handle, REG_LR_MODEMCONFIG2, reg);
 }
 
 lora_spreading_factor_t lora_get_spreading_factor(spi_device_handle_t handle) {
-    uint8_t val = lora_read_reg_checked(handle, REG_LR_MODEMCONFIG2);
+    uint8_t val = lora_read_reg(handle, REG_LR_MODEMCONFIG2);
     val &= 0xF0;
     return (lora_spreading_factor_t)val;
 }
 
 lora_coding_rate_t lora_get_coding_rate(spi_device_handle_t handle) {
-    uint8_t val = lora_read_reg_checked(handle, REG_LR_MODEMCONFIG1);
+    uint8_t val = lora_read_reg(handle, REG_LR_MODEMCONFIG1);
     val &= 0x0E;
     return (lora_coding_rate_t)val;
 }
