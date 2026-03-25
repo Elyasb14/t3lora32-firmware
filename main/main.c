@@ -99,7 +99,7 @@ void app_main() {
         if (uart_read_bytes(UART_PORT, &ch, 1, 0) > 0) {
             if (ch >= 32 && ch <= 126) {
                 printf("Manual TX Trigger received (char: %c)\n", ch);
-                send_packet_manual(handle, &oled);
+                send_packet_manual(handle);
             }
         }
 
