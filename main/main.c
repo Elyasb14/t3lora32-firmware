@@ -59,8 +59,8 @@ void app_main() {
     i2c_master_dev_handle_t i2c_handle = i2c_init();
     oled_state_t oled = oled_init(i2c_handle);
 
-    spi_device_handle_t handle = lora_init();
-    if (handle == NULL) {
+    spi_device_handle_t handle = NULL;
+    if (lora_init(&handle) != ESP_OK) {
         printf("LoRa init failed\n");
         return;
     }

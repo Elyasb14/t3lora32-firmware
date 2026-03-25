@@ -27,7 +27,11 @@ void lora_reset(void) {
     vTaskDelay(pdMS_TO_TICKS(10));
 }
 
-static spi_device_handle_t lora_spi_init(void) {
+static esp_err_t lora_spi_init(spi_device_handle_t *out_handle) {
+    if (out_handle == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     spi_device_handle_t lora_spi;
     spi_bus_config_t buscfg = {
         .mosi_io_num = MOSI,
@@ -44,9 +48,18 @@ static spi_device_handle_t lora_spi_init(void) {
         .queue_size = 1,
     };
 
-    ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
-    ESP_ERROR_CHECK(spi_bus_add_device(SPI2_HOST, &devcfg, &lora_spi));
-    return lora_spi;
+    esp_err_t err = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = spi_bus_add_device(SPI2_HOST, &devcfg, &lora_spi);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    *out_handle = lora_spi;
+    return ESP_OK;
 }
 
 esp_err_t lora_read_reg(spi_device_handle_t handle, uint8_t reg, uint8_t *out) {
@@ -82,44 +95,36 @@ esp_err_t lora_write_reg(spi_device_handle_t handle, uint8_t reg,
     return spi_device_transmit(handle, &t);
 }
 
-spi_device_handle_t lora_init(void) {
+esp_err_t lora_init(spi_device_handle_t *out_handle) {
+    if (out_handle == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     gpio_config_t io_conf = {
         .mode = GPIO_MODE_OUTPUT,
         .pin_bit_mask = (1ULL << RST),
     };
 
-    if (gpio_config(&io_conf) != ESP_OK) {
-        return NULL;
-    }
+    CHECK(gpio_config(&io_conf));
 
-    spi_device_handle_t handle = lora_spi_init();
+    spi_device_handle_t handle = NULL;
+    CHECK(lora_spi_init(&handle));
     lora_reset();
 
-    if (lora_write_reg(handle, REG_LR_OPMODE, 0x80) != ESP_OK) {
-        return NULL;
-    }
-    if (lora_write_reg(handle, REG_LR_FRFMSB, 0xE4) != ESP_OK) {
-        return NULL;
-    }
-    if (lora_write_reg(handle, REG_LR_FRFMID, 0xC0) != ESP_OK) {
-        return NULL;
-    }
-    if (lora_write_reg(handle, REG_LR_FRFLSB, 0x00) != ESP_OK) {
-        return NULL;
-    }
-    if (lora_write_reg(handle, REG_LR_OPMODE, 0x81) != ESP_OK) {
-        return NULL;
-    }
+    CHECK(lora_write_reg(handle, REG_LR_OPMODE, 0x80));
+    CHECK(lora_write_reg(handle, REG_LR_FRFMSB, 0xE4));
+    CHECK(lora_write_reg(handle, REG_LR_FRFMID, 0xC0));
+    CHECK(lora_write_reg(handle, REG_LR_FRFLSB, 0x00));
+    CHECK(lora_write_reg(handle, REG_LR_OPMODE, 0x81));
 
     uint8_t version = 0;
-    if (lora_read_reg(handle, REG_LR_VERSION, &version) != ESP_OK) {
-        return NULL;
-    }
+    CHECK(lora_read_reg(handle, REG_LR_VERSION, &version));
     if (version != 0x12 && version != 0x11) {
-        return NULL;
+        return ESP_ERR_INVALID_RESPONSE;
     }
 
-    return handle;
+    *out_handle = handle;
+    return ESP_OK;
 }
 
 esp_err_t lora_get_freq(spi_device_handle_t handle, float *freq_mhz_out) {

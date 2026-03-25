@@ -52,7 +52,7 @@ typedef enum {
 } lora_coding_rate_t;
 
 // initialization and reset
-spi_device_handle_t lora_init();
+esp_err_t lora_init(spi_device_handle_t *out_handle);
 void lora_reset(void);
 
 // register access
