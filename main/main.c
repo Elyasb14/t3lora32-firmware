@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define TX_TRIGGER_CHAR 't'
 #define UART_PORT UART_NUM_0
 #define OLED_TASK_INTERVAL_MS 10
 #define OLED_SHIFT_INTERVAL_TICKS 500
