@@ -92,15 +92,6 @@ void app_main() {
     uint8_t rx_buf[256];
 
     while (1) {
-        uint8_t ch;
-        if (uart_read_bytes(UART_PORT, &ch, 1, 0) > 0) {
-            if (ch >= 32 && ch <= 126) {
-                printf("Manual TX Trigger received (char: %c)\n", ch);
-                const char *data = "hello";
-                lora_send_packet(handle, (const uint8_t *)data, strlen(data));
-            }
-        }
-
         if (gpio_check_dio0_and_clear()) {
             uint8_t flags = lora_get_irq_flags(handle);
 
