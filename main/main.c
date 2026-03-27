@@ -12,41 +12,12 @@
 #include <string.h>
 
 #define UART_PORT UART_NUM_0
-#define OLED_TASK_INTERVAL_MS 10
-#define OLED_SHIFT_INTERVAL_TICKS 500
-
-static void oled_task(void *arg) {
-    oled_state_t *state = (oled_state_t *)arg;
-
-    while (1) {
-        if (state->dirty) {
-            oled_redraw(state);
-        }
-
-        state->shift_timer++;
-        if (state->shift_timer >= OLED_SHIFT_INTERVAL_TICKS) {
-            state->shift_timer = 0;
-
-            if (state->shift_offset == 0) {
-                state->shift_offset = -2;
-            } else if (state->shift_offset == -2) {
-                state->shift_offset = 2;
-            } else {
-                state->shift_offset = 0;
-            }
-
-            state->dirty = true;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(OLED_TASK_INTERVAL_MS));
-    }
-}
 
 void app_main() {
     printf("\n");
 
     i2c_master_dev_handle_t i2c_handle = i2c_init();
-    oled_state_t oled = oled_init(i2c_handle);
+    oled_init(i2c_handle);
 
     spi_device_handle_t handle = lora_init();
 
@@ -58,18 +29,18 @@ void app_main() {
     char tx_buffer[32];
     char freq_buffer[32];
 
-    snprintf(bw_buffer, sizeof(bw_buffer), "BW: %d kHz", lora_get_bandwidth(handle));
-    snprintf(tx_buffer, sizeof(tx_buffer), "TX: %d dBm", lora_get_tx_power(handle));
-    snprintf(freq_buffer, sizeof(freq_buffer), "Freq: %.2f MHz", lora_get_freq(handle));
+    snprintf(bw_buffer, sizeof(bw_buffer), "BW: %d kHz",
+             lora_get_bandwidth(handle));
+    snprintf(tx_buffer, sizeof(tx_buffer), "TX: %d dBm",
+             lora_get_tx_power(handle));
+    snprintf(freq_buffer, sizeof(freq_buffer), "Freq: %.2f MHz",
+             lora_get_freq(handle));
 
-    oled_clear_pages(&oled);
-    oled_set_text(&oled, 2, "mesh repeater");
-    oled_set_text(&oled, 3, freq_buffer);
-    oled_set_text(&oled, 4, bw_buffer);
-    oled_set_text(&oled, 5, tx_buffer);
-
-    xTaskCreatePinnedToCore(oled_task, "oled_task", 3072, &oled,
-                            configMAX_PRIORITIES - 3, NULL, 1);
+    oled_clear_display(i2c_handle);
+    oled_draw_string(i2c_handle, "mesh repeater", 0, 2);
+    oled_draw_string(i2c_handle, freq_buffer, 0, 3);
+    oled_draw_string(i2c_handle, bw_buffer, 0, 4);
+    oled_draw_string(i2c_handle, tx_buffer, 0, 5);
 
     gpio_init_interrupt();
     printf("GPIO Interrupt Initialized\n");
@@ -94,7 +65,8 @@ void app_main() {
                     bytes_to_read = sizeof(rx_buf);
                 }
 
-                lora_read_fifo_payload(handle, rx_buf, (uint8_t)bytes_to_read);
+                lora_read_fifo_payload(handle, rx_buf,
+                                       (uint8_t)bytes_to_read);
 
                 printf("Received %d bytes (Hex): ", bytes_to_read);
                 for (int i = 0; i < bytes_to_read; i++) {
