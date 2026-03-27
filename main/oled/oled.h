@@ -1,7 +1,7 @@
 #ifndef OLED_H
 #define OLED_H
 
-#include "driver/i2c_master.h"
+#include <driver/i2c_types.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
