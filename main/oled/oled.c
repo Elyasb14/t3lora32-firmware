@@ -70,8 +70,6 @@ void oled_draw_string(i2c_master_dev_handle_t handle, const char *str,
 }
 
 void oled_init(i2c_master_dev_handle_t handle) {
-    s_i2c_handle = handle;
-
     oled_send_cmd(0xAE);
     oled_send_cmd(0xD5);
     oled_send_cmd(0x80);
