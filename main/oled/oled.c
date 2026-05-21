@@ -1,21 +1,22 @@
 #include "oled.h"
 #include "driver/i2c_master.h"
+#include "driver/i2c_types.h"
 #include "esp_err.h"
 #include <string.h>
 
-static i2c_master_dev_handle_t s_i2c_handle;
+// static i2c_master_dev_handle_t s_i2c_handle;
 static const uint8_t font5x7[95][5];
 
-static void oled_send_cmd(uint8_t cmd) {
+static void oled_send_cmd(i2c_master_dev_handle_t handle, uint8_t cmd) {
     uint8_t buf[2] = {0x00, cmd};
-    ESP_ERROR_CHECK(i2c_master_transmit(s_i2c_handle, buf, 2, 1000));
+    ESP_ERROR_CHECK(i2c_master_transmit(handle, buf, 2, 1000));
 }
 
-static void oled_send_data(uint8_t *data, size_t len) {
+static void oled_send_data(i2c_master_dev_handle_t handle, uint8_t *data, size_t len) {
     uint8_t buf[len + 1];
     buf[0] = 0x40;
     memcpy(buf + 1, data, len);
-    ESP_ERROR_CHECK(i2c_master_transmit(s_i2c_handle, buf, len + 1, 1000));
+    ESP_ERROR_CHECK(i2c_master_transmit(handle, buf, len + 1, 1000));
 }
 
 void oled_clear_display(i2c_master_dev_handle_t handle) {
@@ -23,10 +24,10 @@ void oled_clear_display(i2c_master_dev_handle_t handle) {
     memset(empty, 0x00, sizeof(empty));
 
     for (int page = 0; page < OLED_PAGES; page++) {
-        oled_send_cmd(0xB0 + page);
-        oled_send_cmd(0x00);
-        oled_send_cmd(0x10);
-        oled_send_data(empty, sizeof(empty));
+        oled_send_cmd(handle, 0xB0 + page);
+        oled_send_cmd(handle, 0x00);
+        oled_send_cmd(handle, 0x10);
+        oled_send_data(handle, empty, sizeof(empty));
     }
 }
 
@@ -35,10 +36,10 @@ void oled_fill_white(i2c_master_dev_handle_t handle) {
     memset(white, 0xFF, sizeof(white));
 
     for (int page = 0; page < OLED_PAGES; page++) {
-        oled_send_cmd(0xB0 + page);
-        oled_send_cmd(0x00);
-        oled_send_cmd(0x10);
-        oled_send_data(white, sizeof(white));
+        oled_send_cmd(handle, 0xB0 + page);
+        oled_send_cmd(handle, 0x00);
+        oled_send_cmd(handle, 0x10);
+        oled_send_data(handle, white, sizeof(white));
     }
 }
 
@@ -49,10 +50,10 @@ void oled_draw_char(i2c_master_dev_handle_t handle, char c, uint8_t col,
     uint8_t buffer[5];
     memcpy(buffer, font5x7[c - 32], 5);
 
-    oled_send_cmd(0xB0 + page);
-    oled_send_cmd(0x00 + (col & 0x0F));
-    oled_send_cmd(0x10 + (col >> 4));
-    oled_send_data(buffer, 5);
+    oled_send_cmd(handle, 0xB0 + page);
+    oled_send_cmd(handle, 0x00 + (col & 0x0F));
+    oled_send_cmd(handle, 0x10 + (col >> 4));
+    oled_send_data(handle, buffer, 5);
 }
 
 void oled_draw_string(i2c_master_dev_handle_t handle, const char *str,
@@ -70,31 +71,32 @@ void oled_draw_string(i2c_master_dev_handle_t handle, const char *str,
 }
 
 void oled_init(i2c_master_dev_handle_t handle) {
-    oled_send_cmd(0xAE);
-    oled_send_cmd(0xD5);
-    oled_send_cmd(0x80);
-    oled_send_cmd(0xA8);
-    oled_send_cmd(0x3F);
-    oled_send_cmd(0xD3);
-    oled_send_cmd(0x00);
-    oled_send_cmd(0x40);
-    oled_send_cmd(0x8D);
-    oled_send_cmd(0x14);
-    oled_send_cmd(0xA1);
-    oled_send_cmd(0xC8);
-    oled_send_cmd(0xDA);
-    oled_send_cmd(0x12);
-    oled_send_cmd(0x81);
-    oled_send_cmd(0xCF);
-    oled_send_cmd(0xD9);
-    oled_send_cmd(0xF1);
-    oled_send_cmd(0xDB);
-    oled_send_cmd(0x40);
-    oled_send_cmd(0xA4);
-    oled_send_cmd(0xA6);
-    oled_send_cmd(0xAF);
-    oled_send_cmd(0x20);
-    oled_send_cmd(0x02);
+
+    oled_send_cmd(handle, 0xAE);
+    oled_send_cmd(handle, 0xD5);
+    oled_send_cmd(handle, 0x80);
+    oled_send_cmd(handle, 0xA8);
+    oled_send_cmd(handle, 0x3F);
+    oled_send_cmd(handle, 0xD3);
+    oled_send_cmd(handle, 0x00);
+    oled_send_cmd(handle, 0x40);
+    oled_send_cmd(handle, 0x8D);
+    oled_send_cmd(handle, 0x14);
+    oled_send_cmd(handle, 0xA1);
+    oled_send_cmd(handle, 0xC8);
+    oled_send_cmd(handle, 0xDA);
+    oled_send_cmd(handle, 0x12);
+    oled_send_cmd(handle, 0x81);
+    oled_send_cmd(handle, 0xCF);
+    oled_send_cmd(handle, 0xD9);
+    oled_send_cmd(handle, 0xF1);
+    oled_send_cmd(handle, 0xDB);
+    oled_send_cmd(handle, 0x40);
+    oled_send_cmd(handle, 0xA4);
+    oled_send_cmd(handle, 0xA6);
+    oled_send_cmd(handle, 0xAF);
+    oled_send_cmd(handle, 0x20);
+    oled_send_cmd(handle, 0x02);
 
     oled_clear_display(handle);
 }

@@ -1,6 +1,7 @@
 #include "gpio/gpio.h"
 #include "i2c/i2c.h"
 #include "lora/lora.h"
+#include "mesh/identity/identity.h"
 #include "oled/oled.h"
 #include <driver/gpio.h>
 #include <driver/i2c_types.h>
@@ -9,12 +10,25 @@
 #include <freertos/task.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 
 #define UART_PORT UART_NUM_0
 
 void app_main() {
     printf("\n");
+
+    mesh_identity_t identity = mesh_identity_init();
+
+    char *role = "";
+
+    switch (identity.role) {
+    case ROLE_CLIENT:
+        role = "client";
+        break;
+    case ROLE_REPEATER:
+        role = "repeater";
+        break;
+    }
 
     i2c_master_dev_handle_t i2c_handle = i2c_init();
     oled_init(i2c_handle);
@@ -37,7 +51,7 @@ void app_main() {
              lora_get_freq(handle));
 
     oled_clear_display(i2c_handle);
-    oled_draw_string(i2c_handle, "mesh repeater", 0, 2);
+    oled_draw_string(i2c_handle, role, 0, 2);
     oled_draw_string(i2c_handle, freq_buffer, 0, 3);
     oled_draw_string(i2c_handle, bw_buffer, 0, 4);
     oled_draw_string(i2c_handle, tx_buffer, 0, 5);
