@@ -5,6 +5,5 @@ idf_component_register(
         "i2c/i2c.c"
         "lora/lora.c"
         "oled/oled.c"
-        "mesh/identity/identity.c"
     INCLUDE_DIRS "."
 )

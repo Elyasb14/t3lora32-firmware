@@ -31,8 +31,6 @@ For the T3 LoRa32 device connected to `/dev/tty.usbserial-576A0039151`:
 ## Key Dependencies
 - ESP-IDF v5.5.3
 - FreeRTOS (included in ESP-IDF)
-- SPI driver for LoRa
-- I2C driver for OLED
 
 ## Note
 This is a test/development firmware for LoRa communication with OLED display on ESP32.
