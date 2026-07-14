@@ -9,7 +9,7 @@
 #include <freertos/task.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <string.h>
 
 #define UART_PORT UART_NUM_0
 
@@ -52,29 +52,40 @@ void app_main() {
     uint8_t rx_buf[256];
 
     while (1) {
+
+        char c = getchar();
+
+        switch (c) {
+        case 't':
+            char *buf = "whats up my g";
+            lora_send_packet(handle, (uint8_t *)buf, strlen(buf));
+            break;
+        default:
+            break;
+        }
+
         if (gpio_check_dio0_and_clear()) {
             uint8_t flags = lora_get_irq_flags(handle);
 
             if (flags & RFLR_IRQFLAGS_RXDONE) {
                 gpio_blink_led();
 
-                uint8_t rx_len = lora_get_rx_payload_length(handle);
-                uint16_t bytes_to_read = rx_len;
-                if (bytes_to_read > sizeof(rx_buf)) {
-                    bytes_to_read = sizeof(rx_buf);
+                uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(handle);
+                if (rx_len > sizeof(rx_buf)) {
+                    rx_len = sizeof(rx_buf);
                 }
 
                 lora_read_fifo_payload(handle, rx_buf,
-                                       (uint8_t)bytes_to_read);
+                                       (uint8_t)rx_len);
 
-                printf("Received %d bytes (Hex): ", bytes_to_read);
-                for (int i = 0; i < bytes_to_read; i++) {
+                printf("Received %d bytes (Hex): ", rx_len);
+                for (int i = 0; i < rx_len; i++) {
                     printf("%02X ", rx_buf[i]);
                 }
                 printf("\n");
 
                 printf("Received String: '");
-                for (int i = 0; i < bytes_to_read; i++) {
+                for (int i = 0; i < rx_len; i++) {
                     if (rx_buf[i] >= 32 && rx_buf[i] <= 126) {
                         printf("%c", rx_buf[i]);
                     } else {
@@ -87,6 +98,7 @@ void app_main() {
             }
 
             if (flags & RFLR_IRQFLAGS_TXDONE) {
+
                 gpio_blink_led();
                 printf("Packet sent successfully (TX Done Interrupt)\n");
 
