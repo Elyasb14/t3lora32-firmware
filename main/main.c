@@ -1,3 +1,7 @@
+#include "driver/spi_master.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/projdefs.h"
+#include "freertos/task.h"
 #include "gpio/gpio.h"
 #include "i2c/i2c.h"
 #include "lora/lora.h"
@@ -10,8 +14,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
-#define UART_PORT UART_NUM_0
 
 void app_main() {
     printf("\n");
@@ -42,26 +44,19 @@ void app_main() {
     oled_draw_string(i2c_handle, tx_buffer, 0, 5);
 
     gpio_init_interrupt();
-    printf("GPIO Interrupt Initialized\n");
 
     lora_set_dio0_mapping(handle, false);
 
     lora_set_mode_rx_continuous(handle);
-    printf("Entering RX Continuous Mode...\n");
 
     uint8_t rx_buf[256];
+    char tty_buf[256];
 
     while (1) {
 
-        char c = getchar();
-
-        switch (c) {
-        case 't':
-            char *buf = "whats up my g";
-            lora_send_packet(handle, (uint8_t *)buf, strlen(buf));
-            break;
-        default:
-            break;
+        if (fgets(tty_buf, sizeof(tty_buf), stdin) != NULL) {
+            printf("%s\n", tty_buf);
+            lora_send_packet(handle, (uint8_t *)tty_buf, strlen(tty_buf));
         }
 
         if (gpio_check_dio0_and_clear()) {
@@ -84,13 +79,8 @@ void app_main() {
                 }
                 printf("\n");
 
-                printf("Received String: '");
                 for (int i = 0; i < rx_len; i++) {
-                    if (rx_buf[i] >= 32 && rx_buf[i] <= 126) {
-                        printf("%c", rx_buf[i]);
-                    } else {
-                        printf(".");
-                    }
+                    printf("%c", rx_buf[i]);
                 }
                 printf("'\n");
 
@@ -100,17 +90,14 @@ void app_main() {
             if (flags & RFLR_IRQFLAGS_TXDONE) {
 
                 gpio_blink_led();
-                printf("Packet sent successfully (TX Done Interrupt)\n");
 
                 lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
 
                 lora_set_dio0_mapping(handle, false);
                 lora_set_mode_rx_continuous(handle);
-                printf("Returned to RX Continuous Mode\n");
             }
 
             if (flags & RFLR_IRQFLAGS_PAYLOADCRCERROR) {
-                printf("CRC Error in received packet\n");
                 lora_clear_irq_flags(handle, RFLR_IRQFLAGS_PAYLOADCRCERROR);
             }
         }

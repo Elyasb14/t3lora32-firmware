@@ -213,9 +213,6 @@ void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
     }
 
     lora_set_mode_tx(handle);
-
-    printf("Transmitting: '%s'\n", buf);
-    printf("TX Mode Started, waiting for interrupt...\n");
 }
 
 void lora_set_mode_rx_single(spi_device_handle_t handle) {
