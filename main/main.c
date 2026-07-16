@@ -16,8 +16,6 @@
 #include <string.h>
 
 void app_main() {
-    printf("\n");
-
     i2c_master_dev_handle_t i2c_handle = i2c_init();
     oled_init(i2c_handle);
 
@@ -55,7 +53,6 @@ void app_main() {
     while (1) {
 
         if (fgets(tty_buf, sizeof(tty_buf), stdin) != NULL) {
-            printf("%s\n", tty_buf);
             lora_send_packet(handle, (uint8_t *)tty_buf, strlen(tty_buf));
         }
 
@@ -63,6 +60,7 @@ void app_main() {
             uint8_t flags = lora_get_irq_flags(handle);
 
             if (flags & RFLR_IRQFLAGS_RXDONE) {
+                gpio_blink_led();
                 gpio_blink_led();
 
                 uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(handle);
@@ -73,16 +71,10 @@ void app_main() {
                 lora_read_fifo_payload(handle, rx_buf,
                                        (uint8_t)rx_len);
 
-                printf("Received %d bytes (Hex): ", rx_len);
-                for (int i = 0; i < rx_len; i++) {
-                    printf("%02X ", rx_buf[i]);
-                }
-                printf("\n");
-
+                printf("RCVD PKT:");
                 for (int i = 0; i < rx_len; i++) {
                     printf("%c", rx_buf[i]);
                 }
-                printf("'\n");
 
                 lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE);
             }
