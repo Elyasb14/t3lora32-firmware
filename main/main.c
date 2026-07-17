@@ -20,7 +20,7 @@ typedef struct {
     spi_device_handle_t handle;
 } TTYArgs;
 
-void tty_task(void *arg) {
+void uart_read_task(void *arg) {
     TTYArgs *tty_args = arg;
 
     uint8_t data[256];
@@ -53,7 +53,7 @@ void init_uart() {
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
     };
 
-    uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0);
+    uart_driver_install(UART_NUM_0, 1024, 1024, 0, NULL, 0);
     uart_param_config(UART_NUM_0, &uart_config);
 }
 
@@ -94,7 +94,7 @@ void app_main() {
     char tty_buf[256];
 
     TTYArgs tty_args = {.buf = tty_buf, .handle = handle};
-    xTaskCreate(tty_task, "tty_task", 4096, &tty_args, 1, NULL);
+    xTaskCreate(uart_read_task, "tty_task", 4096, &tty_args, 1, NULL);
 
     while (1) {
 
@@ -103,6 +103,7 @@ void app_main() {
 
             if (flags & RFLR_IRQFLAGS_RXDONE) {
                 gpio_blink_led();
+                vTaskDelay(pdMS_TO_TICKS(10));
                 gpio_blink_led();
 
                 uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(handle);
@@ -113,10 +114,11 @@ void app_main() {
                 lora_read_fifo_payload(handle, rx_buf,
                                        (uint8_t)rx_len);
 
-                printf("RCVD PKT:");
-                for (int i = 0; i < rx_len; i++) {
-                    printf("%c", rx_buf[i]);
-                }
+                uart_write_bytes(UART_NUM_0, (char *)rx_buf, rx_len);
+                // printf("RCVD PKT:");
+                // for (int i = 0; i < rx_len; i++) {
+                //     printf("%c", rx_buf[i]);
+                // }
 
                 lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE);
             }
