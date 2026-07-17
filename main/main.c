@@ -15,6 +15,48 @@
 #include <stdio.h>
 #include <string.h>
 
+typedef struct {
+    char *buf;
+    spi_device_handle_t handle;
+} TTYArgs;
+
+void tty_task(void *arg) {
+    TTYArgs *tty_args = arg;
+
+    uint8_t data[256];
+
+    while (1) {
+        int len = uart_read_bytes(
+            UART_NUM_0,
+            data,
+            256,
+            pdMS_TO_TICKS(10));
+
+        if (len > 0) {
+            printf("GOT PACKET: ");
+            fwrite(data, 1, len, stdout);
+            printf("\n");
+
+            lora_send_packet(
+                tty_args->handle,
+                data,
+                len);
+        }
+    }
+}
+void init_uart() {
+    const uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+    };
+
+    uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0);
+    uart_param_config(UART_NUM_0, &uart_config);
+}
+
 void app_main() {
     i2c_master_dev_handle_t i2c_handle = i2c_init();
     oled_init(i2c_handle);
@@ -42,6 +84,7 @@ void app_main() {
     oled_draw_string(i2c_handle, tx_buffer, 0, 5);
 
     gpio_init_interrupt();
+    init_uart();
 
     lora_set_dio0_mapping(handle, false);
 
@@ -50,11 +93,10 @@ void app_main() {
     uint8_t rx_buf[256];
     char tty_buf[256];
 
-    while (1) {
+    TTYArgs tty_args = {.buf = tty_buf, .handle = handle};
+    xTaskCreate(tty_task, "tty_task", 4096, &tty_args, 1, NULL);
 
-        if (fgets(tty_buf, sizeof(tty_buf), stdin) != NULL) {
-            lora_send_packet(handle, (uint8_t *)tty_buf, strlen(tty_buf));
-        }
+    while (1) {
 
         if (gpio_check_dio0_and_clear()) {
             uint8_t flags = lora_get_irq_flags(handle);
