@@ -7,26 +7,34 @@
 #include "i2c/i2c.h"
 #include "lora/lora.h"
 #include "oled/oled.h"
+#include "portmacro.h"
 #include <driver/gpio.h>
 #include <driver/i2c_types.h>
 #include <driver/spi_master.h>
 #include <driver/uart.h>
 #include <freertos/task.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <unistd.h>
+
+#define configSUPPORT_STATIC_ALLOCATION 1
+#define LORA_QUEUE_LENGTH 10
+#define LORA_ITEM_SIZE sizeof(LoraQueueItem)
 
 typedef struct {
     uint8_t *data;
     uint8_t len;
-} LoraFrame;
+} LoraQueueItem;
 
 typedef struct {
     char *buf;
-    QueueHandle_t lora_tx_queue;
+    QueueHandle_t lora_queue_handle;
 } UARTArgs;
 
 typedef struct {
     uint8_t *buf;
     spi_device_handle_t handle;
+    QueueHandle_t lora_queue_handle;
 } LoraArgs;
 
 void uart_task(void *arg) {
@@ -42,11 +50,10 @@ void uart_task(void *arg) {
             256,
             pdMS_TO_TICKS(10));
 
-        LoraFrame lora_frame = {.len = len, .data = data};
+        LoraQueueItem lora_queue_item = {.len = len, .data = data};
 
         if (len > 0) {
-            // send bytes to lora tx queue
-            xQueueSend(uart_args->lora_tx_queue, &lora_frame, portMAX_DELAY);
+            xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
         }
     }
 }
@@ -67,6 +74,12 @@ QueueHandle_t lora_tx_queue;
 
 void lora_task(void *args) {
     LoraArgs *lora_args = args;
+
+    LoraQueueItem lora_queue_item;
+
+    if (xQueueReceive(lora_args->lora_queue_handle, &(lora_queue_item), portMAX_DELAY)) {
+        printf("QUEUE ITEM: %s\n", lora_queue_item.data);
+    }
 
     while (1) {
         if (gpio_check_dio0_and_clear()) {
@@ -110,11 +123,24 @@ void lora_task(void *args) {
     }
 }
 
+QueueHandle_t create_lora_queue() {
+
+    uint8_t lora_queue_storage_area[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE];
+    static StaticQueue_t lora_tx_queue;
+
+    QueueHandle_t lora_queue_handle;
+
+    lora_queue_handle = xQueueCreateStatic(LORA_QUEUE_LENGTH, LORA_ITEM_SIZE, lora_queue_storage_area, &lora_tx_queue);
+    return lora_queue_handle;
+}
+
 void app_main() {
     i2c_master_dev_handle_t i2c_handle = i2c_init();
     oled_init(i2c_handle);
 
     spi_device_handle_t handle = lora_init();
+
+    init_uart();
 
     lora_set_tx_power(handle, 1);
     lora_set_frequency(handle, 903000000);
@@ -142,13 +168,14 @@ void app_main() {
 
     lora_set_mode_rx_continuous(handle);
 
-    uint8_t rx_buf[256];
+    uint8_t rx_buf[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE];
     char uart_buf[256];
 
-    init_uart();
-    UARTArgs tty_args = {.buf = uart_buf};
+    QueueHandle_t lora_queue_handle = create_lora_queue();
+
+    UARTArgs tty_args = {.buf = uart_buf, .lora_queue_handle = lora_queue_handle};
     xTaskCreate(uart_task, "uart_read_task", 4096, &tty_args, 1, NULL);
 
-    LoraArgs lora_args = {.handle = handle, .buf = rx_buf};
+    LoraArgs lora_args = {.handle = handle, .buf = rx_buf, .lora_queue_handle = lora_queue_handle};
     xTaskCreate(lora_task, "lora_task", 4096, &lora_args, 1, NULL);
 }
