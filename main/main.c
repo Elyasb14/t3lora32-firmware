@@ -55,6 +55,7 @@ void uart_task(void *arg) {
 
         if (len > 0) {
             xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
+            xTaskNotify(uart_args->lora_task_handle, 1, eSetBits);
         }
     }
 }
@@ -83,8 +84,13 @@ void lora_task(void *args) {
 
     while (1) {
 
-        if (xQueueReceive(lora_args->lora_queue_handle, &(lora_queue_item), portMAX_DELAY)) {
-            lora_send_packet(lora_args->handle, lora_queue_item.data, lora_queue_item.len);
+        uint32_t events;
+        xTaskNotifyWait(0, UINT32_MAX, &events, portMAX_DELAY);
+
+        if (events == 1) {
+            if (xQueueReceive(lora_args->lora_queue_handle, &(lora_queue_item), portMAX_DELAY)) {
+                lora_send_packet(lora_args->handle, lora_queue_item.data, lora_queue_item.len);
+            }
         }
 
         if (gpio_check_dio0_and_clear()) {
@@ -177,7 +183,6 @@ void app_main() {
     static char uart_buf[256];
 
     QueueHandle_t lora_queue_handle = create_lora_queue();
-    TaskHandle_t lora_task_handle;
 
     uart_args = (UARTArgs){.buf = uart_buf, .lora_queue_handle = lora_queue_handle, .lora_task_handle = lora_task_handle};
     xTaskCreate(uart_task, "uart_read_task", 4096, &uart_args, 1, NULL);
