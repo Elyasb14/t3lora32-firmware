@@ -79,11 +79,12 @@ void lora_task(void *args) {
 
     LoraQueueItem lora_queue_item;
 
-    if (xQueueReceive(lora_args->lora_queue_handle, &(lora_queue_item), portMAX_DELAY)) {
-        lora_send_packet(lora_args->handle, lora_queue_item.data, lora_queue_item.len);
-    }
-
     while (1) {
+
+        if (xQueueReceive(lora_args->lora_queue_handle, &(lora_queue_item), portMAX_DELAY)) {
+            lora_send_packet(lora_args->handle, lora_queue_item.data, lora_queue_item.len);
+        }
+
         if (gpio_check_dio0_and_clear()) {
             uint8_t flags = lora_get_irq_flags(lora_args->handle);
 
