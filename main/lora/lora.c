@@ -206,9 +206,9 @@ void lora_send_packet(spi_device_handle_t handle, const uint8_t *buf,
     lora_set_mode_standby(handle);
     lora_write_reg(handle, REG_LR_FIFOTXBASEADDR, 0x00);
     lora_write_reg(handle, REG_LR_FIFOADDRPTR, 0x00);
-    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, strlen((char *)buf));
+    lora_write_reg(handle, REG_LR_PAYLOADLENGTH, len);
 
-    for (int i = 0; i < strlen((char *)buf); i++) {
+    for (int i = 0; i < len; i++) {
         lora_write_reg(handle, REG_LR_FIFO, buf[i]);
     }
 
