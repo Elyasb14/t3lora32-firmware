@@ -1,5 +1,6 @@
 #include "driver/spi_master.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
 #include "gpio/gpio.h"
@@ -12,11 +13,15 @@
 #include <driver/uart.h>
 #include <freertos/task.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
+
+typedef struct {
+    uint8_t *data;
+    uint8_t len;
+} LoraFrame;
 
 typedef struct {
     char *buf;
+    QueueHandle_t lora_tx_queue;
 } UARTArgs;
 
 typedef struct {
@@ -25,7 +30,7 @@ typedef struct {
 } LoraArgs;
 
 void uart_task(void *arg) {
-    // UARTArgs *uart_args= arg;
+    UARTArgs *uart_args = arg;
 
     uint8_t data[256];
 
@@ -37,8 +42,11 @@ void uart_task(void *arg) {
             256,
             pdMS_TO_TICKS(10));
 
+        LoraFrame lora_frame = {.len = len, .data = data};
+
         if (len > 0) {
             // send bytes to lora tx queue
+            xQueueSend(uart_args->lora_tx_queue, &lora_frame, portMAX_DELAY);
         }
     }
 }
@@ -54,6 +62,8 @@ void init_uart() {
     uart_driver_install(UART_NUM_0, 1024, 1024, 0, NULL, 0);
     uart_param_config(UART_NUM_0, &uart_config);
 }
+
+QueueHandle_t lora_tx_queue;
 
 void lora_task(void *args) {
     LoraArgs *lora_args = args;
