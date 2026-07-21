@@ -29,6 +29,7 @@ typedef struct {
 typedef struct {
     char *buf;
     QueueHandle_t lora_queue_handle;
+    TaskHandle_t lora_task_handle;
 } UARTArgs;
 
 typedef struct {
@@ -70,6 +71,7 @@ void init_uart() {
     uart_param_config(UART_NUM_0, &uart_config);
 }
 
+static TaskHandle_t lora_task_handle;
 QueueHandle_t lora_tx_queue;
 static UARTArgs uart_args;
 static LoraArgs lora_args;
@@ -175,10 +177,11 @@ void app_main() {
     static char uart_buf[256];
 
     QueueHandle_t lora_queue_handle = create_lora_queue();
+    TaskHandle_t lora_task_handle;
 
-    uart_args = (UARTArgs){.buf = uart_buf, .lora_queue_handle = lora_queue_handle};
+    uart_args = (UARTArgs){.buf = uart_buf, .lora_queue_handle = lora_queue_handle, .lora_task_handle = lora_task_handle};
     xTaskCreate(uart_task, "uart_read_task", 4096, &uart_args, 1, NULL);
 
     lora_args = (LoraArgs){.handle = handle, .buf = rx_buf, .lora_queue_handle = lora_queue_handle};
-    xTaskCreate(lora_task, "lora_task", 4096, &lora_args, 1, NULL);
+    xTaskCreate(lora_task, "lora_task", 4096, &lora_args, 1, &lora_task_handle);
 }
