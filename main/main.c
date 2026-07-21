@@ -26,6 +26,7 @@ void uart_read_task(void *arg) {
     uint8_t data[256];
 
     while (1) {
+
         int len = uart_read_bytes(
             UART_NUM_0,
             data,
@@ -33,10 +34,6 @@ void uart_read_task(void *arg) {
             pdMS_TO_TICKS(10));
 
         if (len > 0) {
-            printf("GOT PACKET: ");
-            fwrite(data, 1, len, stdout);
-            printf("\n");
-
             lora_send_packet(
                 tty_args->handle,
                 data,
@@ -84,7 +81,6 @@ void app_main() {
     oled_draw_string(i2c_handle, tx_buffer, 0, 5);
 
     gpio_init_interrupt();
-    init_uart();
 
     lora_set_dio0_mapping(handle, false);
 
@@ -93,6 +89,7 @@ void app_main() {
     uint8_t rx_buf[256];
     char tty_buf[256];
 
+    init_uart();
     TTYArgs tty_args = {.buf = tty_buf, .handle = handle};
     xTaskCreate(uart_read_task, "tty_task", 4096, &tty_args, 1, NULL);
 
@@ -103,7 +100,7 @@ void app_main() {
 
             if (flags & RFLR_IRQFLAGS_RXDONE) {
                 gpio_blink_led();
-                vTaskDelay(pdMS_TO_TICKS(10));
+                vTaskDelay(pdMS_TO_TICKS(100));
                 gpio_blink_led();
 
                 uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(handle);
@@ -114,11 +111,8 @@ void app_main() {
                 lora_read_fifo_payload(handle, rx_buf,
                                        (uint8_t)rx_len);
 
-                uart_write_bytes(UART_NUM_0, (char *)rx_buf, rx_len);
-                // printf("RCVD PKT:");
-                // for (int i = 0; i < rx_len; i++) {
-                //     printf("%c", rx_buf[i]);
-                // }
+                int written = uart_write_bytes(UART_NUM_0, (const char *)rx_buf, rx_len);
+                printf("wrote %d/%d bytes\n", written, rx_len);
 
                 lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE);
             }
