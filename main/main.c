@@ -17,11 +17,15 @@
 
 typedef struct {
     char *buf;
-    spi_device_handle_t handle;
-} TTYArgs;
+} UARTArgs;
 
-void uart_read_task(void *arg) {
-    TTYArgs *tty_args = arg;
+typedef struct {
+    uint8_t *buf;
+    spi_device_handle_t handle;
+} LoraArgs;
+
+void uart_task(void *arg) {
+    // UARTArgs *uart_args= arg;
 
     uint8_t data[256];
 
@@ -34,10 +38,7 @@ void uart_read_task(void *arg) {
             pdMS_TO_TICKS(10));
 
         if (len > 0) {
-            lora_send_packet(
-                tty_args->handle,
-                data,
-                len);
+            // send bytes to lora tx queue
         }
     }
 }
@@ -52,6 +53,51 @@ void init_uart() {
 
     uart_driver_install(UART_NUM_0, 1024, 1024, 0, NULL, 0);
     uart_param_config(UART_NUM_0, &uart_config);
+}
+
+void lora_task(void *args) {
+    LoraArgs *lora_args = args;
+
+    while (1) {
+        if (gpio_check_dio0_and_clear()) {
+            uint8_t flags = lora_get_irq_flags(lora_args->handle);
+
+            if (flags & RFLR_IRQFLAGS_RXDONE) {
+                gpio_blink_led();
+                vTaskDelay(pdMS_TO_TICKS(100));
+                gpio_blink_led();
+
+                uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(lora_args->handle);
+                if (rx_len > sizeof(lora_args->buf)) {
+                    rx_len = sizeof(lora_args->buf);
+                }
+
+                lora_read_fifo_payload(lora_args->handle, lora_args->buf,
+                                       (uint8_t)rx_len);
+
+                int written = uart_write_bytes(UART_NUM_0, (const char *)lora_args->buf, rx_len);
+                printf("wrote %d/%d bytes\n", written, rx_len);
+
+                lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_RXDONE);
+            }
+
+            if (flags & RFLR_IRQFLAGS_TXDONE) {
+
+                gpio_blink_led();
+
+                lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_TXDONE);
+
+                lora_set_dio0_mapping(lora_args->handle, false);
+                lora_set_mode_rx_continuous(lora_args->handle);
+            }
+
+            if (flags & RFLR_IRQFLAGS_PAYLOADCRCERROR) {
+                lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_PAYLOADCRCERROR);
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
 
 void app_main() {
@@ -87,51 +133,12 @@ void app_main() {
     lora_set_mode_rx_continuous(handle);
 
     uint8_t rx_buf[256];
-    char tty_buf[256];
+    char uart_buf[256];
 
     init_uart();
-    TTYArgs tty_args = {.buf = tty_buf, .handle = handle};
-    xTaskCreate(uart_read_task, "tty_task", 4096, &tty_args, 1, NULL);
+    UARTArgs tty_args = {.buf = uart_buf};
+    xTaskCreate(uart_task, "uart_read_task", 4096, &tty_args, 1, NULL);
 
-    while (1) {
-
-        if (gpio_check_dio0_and_clear()) {
-            uint8_t flags = lora_get_irq_flags(handle);
-
-            if (flags & RFLR_IRQFLAGS_RXDONE) {
-                gpio_blink_led();
-                vTaskDelay(pdMS_TO_TICKS(100));
-                gpio_blink_led();
-
-                uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(handle);
-                if (rx_len > sizeof(rx_buf)) {
-                    rx_len = sizeof(rx_buf);
-                }
-
-                lora_read_fifo_payload(handle, rx_buf,
-                                       (uint8_t)rx_len);
-
-                int written = uart_write_bytes(UART_NUM_0, (const char *)rx_buf, rx_len);
-                printf("wrote %d/%d bytes\n", written, rx_len);
-
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE);
-            }
-
-            if (flags & RFLR_IRQFLAGS_TXDONE) {
-
-                gpio_blink_led();
-
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
-
-                lora_set_dio0_mapping(handle, false);
-                lora_set_mode_rx_continuous(handle);
-            }
-
-            if (flags & RFLR_IRQFLAGS_PAYLOADCRCERROR) {
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_PAYLOADCRCERROR);
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
+    LoraArgs lora_args = {.handle = handle, .buf = rx_buf};
+    xTaskCreate(lora_task, "lora_task", 4096, &lora_args, 1, NULL);
 }
