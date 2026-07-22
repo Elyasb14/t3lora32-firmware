@@ -95,8 +95,8 @@ void lora_task(void *args) {
                 lora_send_packet(lora_args->handle, lora_queue_item.data, lora_queue_item.len);
             }
         }
+        if (events & LORA_EVENT_DIO0) {
 
-        if (gpio_check_dio0_and_clear()) {
             uint8_t flags = lora_get_irq_flags(lora_args->handle);
 
             if (flags & RFLR_IRQFLAGS_RXDONE) {
@@ -112,8 +112,7 @@ void lora_task(void *args) {
                 lora_read_fifo_payload(lora_args->handle, lora_args->buf,
                                        (uint8_t)rx_len);
 
-                int written = uart_write_bytes(UART_NUM_0, (const char *)lora_args->buf, rx_len);
-                printf("wrote %d/%d bytes\n", written, rx_len);
+                uart_write_bytes(UART_NUM_0, (const char *)lora_args->buf, rx_len);
 
                 lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_RXDONE);
             }
@@ -176,8 +175,6 @@ void app_main() {
     oled_draw_string(i2c_handle, bw_buffer, 0, 4);
     oled_draw_string(i2c_handle, tx_buffer, 0, 5);
 
-    gpio_init_interrupt();
-
     lora_set_dio0_mapping(handle, false);
 
     lora_set_mode_rx_continuous(handle);
@@ -189,6 +186,8 @@ void app_main() {
 
     lora_args = (LoraArgs){.handle = handle, .buf = rx_buf, .lora_queue_handle = lora_queue_handle};
     xTaskCreate(lora_task, "lora_task", 4096, &lora_args, 1, &lora_task_handle);
+
+    gpio_init_interrupt(lora_task_handle);
 
     uart_args = (UARTArgs){.buf = uart_buf, .lora_queue_handle = lora_queue_handle, .lora_task_handle = lora_task_handle};
     xTaskCreate(uart_task, "uart_read_task", 4096, &uart_args, 1, NULL);

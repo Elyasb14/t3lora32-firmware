@@ -5,18 +5,25 @@
 #include <esp_attr.h>
 #include <stdatomic.h>
 #include <stdbool.h>
-#include <stdio.h>
 
 #define GPIO_LED 25
 #define DIO0_PIN 26
-
-static volatile atomic_bool dio0_triggered = ATOMIC_VAR_INIT(false);
+#define LORA_EVENT_DIO0 (1U << 1)
 
 static void IRAM_ATTR dio0_isr_handler(void *arg) {
-    atomic_store(&dio0_triggered, true);
+    TaskHandle_t lora_task_handle = arg;
+    BaseType_t higher_priority_task_woken = pdFALSE;
+
+    xTaskNotifyFromISR(
+        lora_task_handle,
+        LORA_EVENT_DIO0,
+        eSetBits,
+        &higher_priority_task_woken);
+
+    portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
-void gpio_init_interrupt(void) {
+void gpio_init_interrupt(TaskHandle_t task_handle) {
     gpio_config_t io_conf = {};
     io_conf.pin_bit_mask = (1ULL << DIO0_PIN);
     io_conf.mode = GPIO_MODE_INPUT;
@@ -26,12 +33,7 @@ void gpio_init_interrupt(void) {
 
     gpio_config(&io_conf);
     gpio_install_isr_service(0);
-    gpio_isr_handler_add(DIO0_PIN, dio0_isr_handler, NULL);
-}
-
-bool gpio_check_dio0_and_clear(void) {
-    bool triggered = atomic_exchange(&dio0_triggered, false);
-    return triggered;
+    gpio_isr_handler_add(DIO0_PIN, dio0_isr_handler, task_handle);
 }
 
 void gpio_blink_led(void) {
