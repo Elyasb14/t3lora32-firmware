@@ -57,8 +57,8 @@ void uart_task(void *arg) {
         LoraQueueItem lora_queue_item = {.len = len, .data = data};
 
         if (len > 0) {
-            xTaskNotify(uart_args->lora_task_handle, LORA_EVENT_TX_PENDING, eSetBits);
             xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
+            xTaskNotify(uart_args->lora_task_handle, LORA_EVENT_TX_PENDING, eSetBits);
         }
     }
 }
@@ -105,9 +105,6 @@ void lora_task(void *args) {
                 gpio_blink_led();
 
                 uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(lora_args->handle);
-                if (rx_len > sizeof(lora_args->buf)) {
-                    rx_len = sizeof(lora_args->buf);
-                }
 
                 lora_read_fifo_payload(lora_args->handle, lora_args->buf,
                                        (uint8_t)rx_len);
@@ -179,7 +176,7 @@ void app_main() {
 
     lora_set_mode_rx_continuous(handle);
 
-    static uint8_t rx_buf[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE];
+    static uint8_t rx_buf[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE * 2];
     static char uart_buf[256];
 
     QueueHandle_t lora_queue_handle = create_lora_queue();
