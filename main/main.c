@@ -20,6 +20,8 @@
 #define configSUPPORT_STATIC_ALLOCATION 1
 #define LORA_QUEUE_LENGTH 10
 #define LORA_ITEM_SIZE sizeof(LoraQueueItem)
+#define LORA_EVENT_TX_PENDING (1U << 0)
+#define LORA_EVENT_DIO0 (1U << 1)
 
 typedef struct {
     uint8_t *data;
@@ -38,8 +40,14 @@ typedef struct {
     QueueHandle_t lora_queue_handle;
 } LoraArgs;
 
-#define LORA_EVENT_TX_PENDING (1U << 0)
-#define LORA_EVENT_DIO0 (1U << 1)
+static TaskHandle_t lora_task_handle;
+static UARTArgs uart_args;
+static LoraArgs lora_args;
+static uint8_t rx_buf[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE * 2];
+static char uart_buf[256];
+static StaticQueue_t lora_tx_queue;
+static QueueHandle_t lora_queue_handle;
+static uint8_t lora_queue_storage_area[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE];
 
 void uart_task(void *arg) {
     UARTArgs *uart_args = arg;
@@ -62,6 +70,7 @@ void uart_task(void *arg) {
         }
     }
 }
+
 void init_uart() {
     const uart_config_t uart_config = {
         .baud_rate = 115200,
@@ -75,27 +84,22 @@ void init_uart() {
     uart_param_config(UART_NUM_0, &uart_config);
 }
 
-static TaskHandle_t lora_task_handle;
-QueueHandle_t lora_tx_queue;
-static UARTArgs uart_args;
-static LoraArgs lora_args;
-
 void lora_task(void *args) {
     LoraArgs *lora_args = args;
-
     LoraQueueItem lora_queue_item;
 
     while (1) {
 
-        uint32_t events;
-        xTaskNotifyWait(0, UINT32_MAX, &events, portMAX_DELAY);
+        uint32_t event;
+        xTaskNotifyWait(0, UINT32_MAX, &event, portMAX_DELAY);
 
-        if (events & LORA_EVENT_TX_PENDING) {
+        if (event & LORA_EVENT_TX_PENDING) {
             if (xQueueReceive(lora_args->lora_queue_handle, &(lora_queue_item), portMAX_DELAY)) {
                 lora_send_packet(lora_args->handle, lora_queue_item.data, lora_queue_item.len);
             }
         }
-        if (events & LORA_EVENT_DIO0) {
+
+        if (event & LORA_EVENT_DIO0) {
 
             uint8_t flags = lora_get_irq_flags(lora_args->handle);
 
@@ -134,12 +138,6 @@ void lora_task(void *args) {
 }
 
 QueueHandle_t create_lora_queue() {
-
-    static uint8_t lora_queue_storage_area[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE];
-    static StaticQueue_t lora_tx_queue;
-
-    QueueHandle_t lora_queue_handle;
-
     lora_queue_handle = xQueueCreateStatic(LORA_QUEUE_LENGTH, LORA_ITEM_SIZE, lora_queue_storage_area, &lora_tx_queue);
     return lora_queue_handle;
 }
@@ -175,9 +173,6 @@ void app_main() {
     lora_set_dio0_mapping(handle, false);
 
     lora_set_mode_rx_continuous(handle);
-
-    static uint8_t rx_buf[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE * 2];
-    static char uart_buf[256];
 
     QueueHandle_t lora_queue_handle = create_lora_queue();
 
