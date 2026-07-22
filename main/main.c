@@ -38,6 +38,9 @@ typedef struct {
     QueueHandle_t lora_queue_handle;
 } LoraArgs;
 
+#define LORA_EVENT_TX_PENDING (1U << 0)
+#define LORA_EVENT_DIO0 (1U << 1)
+
 void uart_task(void *arg) {
     UARTArgs *uart_args = arg;
 
@@ -54,8 +57,8 @@ void uart_task(void *arg) {
         LoraQueueItem lora_queue_item = {.len = len, .data = data};
 
         if (len > 0) {
+            xTaskNotify(uart_args->lora_task_handle, LORA_EVENT_TX_PENDING, eSetBits);
             xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
-            xTaskNotify(uart_args->lora_task_handle, 1, eSetBits);
         }
     }
 }
@@ -87,7 +90,7 @@ void lora_task(void *args) {
         uint32_t events;
         xTaskNotifyWait(0, UINT32_MAX, &events, portMAX_DELAY);
 
-        if (events == 1) {
+        if (events & LORA_EVENT_TX_PENDING) {
             if (xQueueReceive(lora_args->lora_queue_handle, &(lora_queue_item), portMAX_DELAY)) {
                 lora_send_packet(lora_args->handle, lora_queue_item.data, lora_queue_item.len);
             }
@@ -184,9 +187,9 @@ void app_main() {
 
     QueueHandle_t lora_queue_handle = create_lora_queue();
 
-    uart_args = (UARTArgs){.buf = uart_buf, .lora_queue_handle = lora_queue_handle, .lora_task_handle = lora_task_handle};
-    xTaskCreate(uart_task, "uart_read_task", 4096, &uart_args, 1, NULL);
-
     lora_args = (LoraArgs){.handle = handle, .buf = rx_buf, .lora_queue_handle = lora_queue_handle};
     xTaskCreate(lora_task, "lora_task", 4096, &lora_args, 1, &lora_task_handle);
+
+    uart_args = (UARTArgs){.buf = uart_buf, .lora_queue_handle = lora_queue_handle, .lora_task_handle = lora_task_handle};
+    xTaskCreate(uart_task, "uart_read_task", 4096, &uart_args, 1, NULL);
 }
