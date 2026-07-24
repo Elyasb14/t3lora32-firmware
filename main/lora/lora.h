@@ -7,6 +7,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define LORA_EVENT_TX_PENDING (1U << 0)
+#define LORA_EVENT_DIO0 (1U << 1)
+
 // IRQ flag masks (from SX1276 datasheet)
 #define IRQ_TX_DONE_MASK RFLR_IRQFLAGS_TXDONE // 0x08
 #define IRQ_RX_DONE_MASK RFLR_IRQFLAGS_RXDONE // 0x40

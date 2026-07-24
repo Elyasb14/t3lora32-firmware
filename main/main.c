@@ -1,11 +1,13 @@
 #include "driver/spi_master.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
 #include "gpio/gpio.h"
 #include "i2c/i2c.h"
 #include "lora/lora.h"
 #include "oled/oled.h"
+#include "portmacro.h"
 #include <driver/gpio.h>
 #include <driver/i2c_types.h>
 #include <driver/spi_master.h>
@@ -13,15 +15,42 @@
 #include <freertos/task.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
+#include <unistd.h>
+
+#define configSUPPORT_STATIC_ALLOCATION 1
+#define LORA_QUEUE_LENGTH 10
+#define LORA_ITEM_SIZE sizeof(LoraQueueItem)
+#define LORA_EVENT_TX_PENDING (1U << 0)
+#define LORA_EVENT_DIO0 (1U << 1)
+
+typedef struct {
+    uint8_t *data;
+    uint8_t len;
+} LoraQueueItem;
 
 typedef struct {
     char *buf;
-    spi_device_handle_t handle;
-} TTYArgs;
+    QueueHandle_t lora_queue_handle;
+    TaskHandle_t lora_task_handle;
+} UARTArgs;
 
-void uart_read_task(void *arg) {
-    TTYArgs *tty_args = arg;
+typedef struct {
+    uint8_t *buf;
+    spi_device_handle_t handle;
+    QueueHandle_t lora_queue_handle;
+} LoraArgs;
+
+static TaskHandle_t lora_task_handle;
+static UARTArgs uart_args;
+static LoraArgs lora_args;
+static uint8_t rx_buf[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE * 2];
+static char uart_buf[256];
+static StaticQueue_t lora_tx_queue;
+static QueueHandle_t lora_queue_handle;
+static uint8_t lora_queue_storage_area[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE];
+
+void uart_task(void *arg) {
+    UARTArgs *uart_args = arg;
 
     uint8_t data[256];
 
@@ -33,14 +62,15 @@ void uart_read_task(void *arg) {
             256,
             pdMS_TO_TICKS(10));
 
+        LoraQueueItem lora_queue_item = {.len = len, .data = data};
+
         if (len > 0) {
-            lora_send_packet(
-                tty_args->handle,
-                data,
-                len);
+            xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
+            xTaskNotify(uart_args->lora_task_handle, LORA_EVENT_TX_PENDING, eSetBits);
         }
     }
 }
+
 void init_uart() {
     const uart_config_t uart_config = {
         .baud_rate = 115200,
@@ -54,11 +84,71 @@ void init_uart() {
     uart_param_config(UART_NUM_0, &uart_config);
 }
 
+void lora_task(void *args) {
+    LoraArgs *lora_args = args;
+    LoraQueueItem lora_queue_item;
+
+    while (1) {
+
+        uint32_t event;
+        xTaskNotifyWait(0, UINT32_MAX, &event, portMAX_DELAY);
+
+        if (event & LORA_EVENT_TX_PENDING) {
+            if (xQueueReceive(lora_args->lora_queue_handle, &(lora_queue_item), portMAX_DELAY)) {
+                lora_send_packet(lora_args->handle, lora_queue_item.data, lora_queue_item.len);
+            }
+        }
+
+        if (event & LORA_EVENT_DIO0) {
+
+            uint8_t flags = lora_get_irq_flags(lora_args->handle);
+
+            if (flags & RFLR_IRQFLAGS_RXDONE) {
+                gpio_blink_led();
+                vTaskDelay(pdMS_TO_TICKS(100));
+                gpio_blink_led();
+
+                uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(lora_args->handle);
+
+                lora_read_fifo_payload(lora_args->handle, lora_args->buf,
+                                       (uint8_t)rx_len);
+
+                uart_write_bytes(UART_NUM_0, (const char *)lora_args->buf, rx_len);
+
+                lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_RXDONE);
+            }
+
+            if (flags & RFLR_IRQFLAGS_TXDONE) {
+
+                gpio_blink_led();
+
+                lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_TXDONE);
+
+                lora_set_dio0_mapping(lora_args->handle, false);
+                lora_set_mode_rx_continuous(lora_args->handle);
+            }
+
+            if (flags & RFLR_IRQFLAGS_PAYLOADCRCERROR) {
+                lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_PAYLOADCRCERROR);
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+QueueHandle_t create_lora_queue() {
+    lora_queue_handle = xQueueCreateStatic(LORA_QUEUE_LENGTH, LORA_ITEM_SIZE, lora_queue_storage_area, &lora_tx_queue);
+    return lora_queue_handle;
+}
+
 void app_main() {
     i2c_master_dev_handle_t i2c_handle = i2c_init();
     oled_init(i2c_handle);
 
     spi_device_handle_t handle = lora_init();
+
+    init_uart();
 
     lora_set_tx_power(handle, 1);
     lora_set_frequency(handle, 903000000);
@@ -80,58 +170,17 @@ void app_main() {
     oled_draw_string(i2c_handle, bw_buffer, 0, 4);
     oled_draw_string(i2c_handle, tx_buffer, 0, 5);
 
-    gpio_init_interrupt();
-
     lora_set_dio0_mapping(handle, false);
 
     lora_set_mode_rx_continuous(handle);
 
-    uint8_t rx_buf[256];
-    char tty_buf[256];
+    QueueHandle_t lora_queue_handle = create_lora_queue();
 
-    init_uart();
-    TTYArgs tty_args = {.buf = tty_buf, .handle = handle};
-    xTaskCreate(uart_read_task, "tty_task", 4096, &tty_args, 1, NULL);
+    lora_args = (LoraArgs){.handle = handle, .buf = rx_buf, .lora_queue_handle = lora_queue_handle};
+    xTaskCreate(lora_task, "lora_task", 4096, &lora_args, 1, &lora_task_handle);
 
-    while (1) {
+    gpio_init_interrupt(lora_task_handle);
 
-        if (gpio_check_dio0_and_clear()) {
-            uint8_t flags = lora_get_irq_flags(handle);
-
-            if (flags & RFLR_IRQFLAGS_RXDONE) {
-                gpio_blink_led();
-                vTaskDelay(pdMS_TO_TICKS(100));
-                gpio_blink_led();
-
-                uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(handle);
-                if (rx_len > sizeof(rx_buf)) {
-                    rx_len = sizeof(rx_buf);
-                }
-
-                lora_read_fifo_payload(handle, rx_buf,
-                                       (uint8_t)rx_len);
-
-                int written = uart_write_bytes(UART_NUM_0, (const char *)rx_buf, rx_len);
-                printf("wrote %d/%d bytes\n", written, rx_len);
-
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_RXDONE);
-            }
-
-            if (flags & RFLR_IRQFLAGS_TXDONE) {
-
-                gpio_blink_led();
-
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_TXDONE);
-
-                lora_set_dio0_mapping(handle, false);
-                lora_set_mode_rx_continuous(handle);
-            }
-
-            if (flags & RFLR_IRQFLAGS_PAYLOADCRCERROR) {
-                lora_clear_irq_flags(handle, RFLR_IRQFLAGS_PAYLOADCRCERROR);
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
+    uart_args = (UARTArgs){.buf = uart_buf, .lora_queue_handle = lora_queue_handle, .lora_task_handle = lora_task_handle};
+    xTaskCreate(uart_task, "uart_read_task", 4096, &uart_args, 1, NULL);
 }
