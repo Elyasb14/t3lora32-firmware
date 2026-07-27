@@ -7,14 +7,17 @@
 #include "i2c/i2c.h"
 #include "lora/lora.h"
 #include "oled/oled.h"
+#include "packet/packet.h"
 #include "portmacro.h"
 #include <driver/gpio.h>
 #include <driver/i2c_types.h>
 #include <driver/spi_master.h>
 #include <driver/uart.h>
 #include <freertos/task.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 #define configSUPPORT_STATIC_ALLOCATION 1
@@ -24,7 +27,7 @@
 #define LORA_EVENT_DIO0 (1U << 1)
 
 typedef struct {
-    uint8_t *data;
+    uint8_t data[PACKET_MAX_LEN];
     uint8_t len;
 } LoraQueueItem;
 
@@ -52,17 +55,23 @@ static uint8_t lora_queue_storage_area[LORA_QUEUE_LENGTH * LORA_ITEM_SIZE];
 void uart_task(void *arg) {
     UARTArgs *uart_args = arg;
 
-    uint8_t data[256];
+    uint8_t data[PACKET_MAX_LEN];
+    uint8_t send_data[PACKET_MAX_LEN];
 
     while (1) {
 
         int len = uart_read_bytes(
             UART_NUM_0,
             data,
-            256,
+            PACKET_MAX_LEN,
             pdMS_TO_TICKS(10));
 
-        LoraQueueItem lora_queue_item = {.len = len, .data = data};
+        Packet packet = packet_parse(data);
+
+        size_t bytes_written = packet_write_to_buf(&packet, send_data);
+
+        LoraQueueItem lora_queue_item = {.len = bytes_written};
+        memcpy(lora_queue_item.data, send_data, bytes_written);
 
         if (len > 0) {
             xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
@@ -112,6 +121,8 @@ void lora_task(void *args) {
 
                 lora_read_fifo_payload(lora_args->handle, lora_args->buf,
                                        (uint8_t)rx_len);
+
+                // construct packet here
 
                 uart_write_bytes(UART_NUM_0, (const char *)lora_args->buf, rx_len);
 
