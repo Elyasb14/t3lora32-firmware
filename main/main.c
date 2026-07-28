@@ -73,8 +73,9 @@ void uart_task(void *arg) {
 
         size_t bytes_written = packet_write_to_buf(&packet, send_data);
 
-        LoraQueueItem lora_queue_item = {.len = bytes_written};
+        LoraQueueItem lora_queue_item = {.len = bytes_written + 1};
         memcpy(lora_queue_item.data, send_data, bytes_written);
+        lora_queue_item.data[bytes_written] = '\n';
 
         xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
         xTaskNotify(uart_args->lora_task_handle, LORA_EVENT_TX_PENDING, eSetBits);
