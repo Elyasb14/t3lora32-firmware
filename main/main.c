@@ -76,10 +76,8 @@ void uart_task(void *arg) {
         LoraQueueItem lora_queue_item = {.len = bytes_written};
         memcpy(lora_queue_item.data, send_data, bytes_written);
 
-        if (len > 0) {
-            xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
-            xTaskNotify(uart_args->lora_task_handle, LORA_EVENT_TX_PENDING, eSetBits);
-        }
+        xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
+        xTaskNotify(uart_args->lora_task_handle, LORA_EVENT_TX_PENDING, eSetBits);
     }
 }
 
