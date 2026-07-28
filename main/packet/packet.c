@@ -12,8 +12,9 @@ size_t packet_write_to_buf(Packet *packet, uint8_t *buf) {
     buf[2] = packet->data_len;
     memcpy(buf + 3, packet->name, packet->name_len);
     memcpy(buf + 3 + packet->name_len, packet->data, packet->data_len);
+    buf[3 + packet->name_len + packet->data_len] = '\n';
 
-    return 3 + packet->name_len + packet->data_len;
+    return 4 + packet->name_len + packet->data_len;
 }
 
 bool packet_parse(Packet *packet, uint8_t *buf, uint8_t len) {
