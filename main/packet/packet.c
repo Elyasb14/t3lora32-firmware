@@ -6,6 +6,8 @@
 
 #define PACKET_MAX_LEN 255
 
+// comment
+
 // returns bytes written
 size_t packet_write_to_buf(Packet *packet, uint8_t *buf) {
     buf[0] = packet->version;
