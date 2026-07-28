@@ -6,6 +6,7 @@
 
 #define PACKET_MAX_LEN 255
 
+// returns bytes written
 size_t packet_write_to_buf(Packet *packet, uint8_t *buf) {
     buf[0] = packet->version;
     buf[1] = packet->name_len;
@@ -18,9 +19,7 @@ size_t packet_write_to_buf(Packet *packet, uint8_t *buf) {
 }
 
 bool packet_parse(Packet *packet, uint8_t *buf, uint8_t len) {
-    if (len < 3) {
-        return false;
-    }
+    if (len < 3) return false;
 
     uint8_t version = buf[0];
     uint8_t name_len = buf[1];
