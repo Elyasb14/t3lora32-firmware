@@ -73,9 +73,8 @@ void uart_task(void *arg) {
 
         size_t bytes_written = packet_write_to_buf(&packet, send_data);
 
-        LoraQueueItem lora_queue_item = {.len = bytes_written + 1};
+        LoraQueueItem lora_queue_item = {.len = bytes_written};
         memcpy(lora_queue_item.data, send_data, bytes_written);
-        lora_queue_item.data[bytes_written] = '\n';
 
         xQueueSend(uart_args->lora_queue_handle, (void *)&lora_queue_item, portMAX_DELAY);
         xTaskNotify(uart_args->lora_task_handle, LORA_EVENT_TX_PENDING, eSetBits);
@@ -115,29 +114,30 @@ void lora_task(void *args) {
             uint8_t flags = lora_get_irq_flags(lora_args->handle);
 
             if (flags & RFLR_IRQFLAGS_RXDONE) {
+                gpio_blink_led();
+                vTaskDelay(pdMS_TO_TICKS(100));
+                gpio_blink_led();
 
                 uint16_t rx_len = (uint16_t)lora_get_rx_payload_length(lora_args->handle);
 
                 lora_read_fifo_payload(lora_args->handle, lora_args->buf,
                                        (uint8_t)rx_len);
 
+                // construct packet here
+
                 uart_write_bytes(UART_NUM_0, (const char *)lora_args->buf, rx_len);
 
                 lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_RXDONE);
-
-                gpio_blink_led();
-                vTaskDelay(pdMS_TO_TICKS(100));
-                gpio_blink_led();
             }
 
             if (flags & RFLR_IRQFLAGS_TXDONE) {
+
+                gpio_blink_led();
 
                 lora_clear_irq_flags(lora_args->handle, RFLR_IRQFLAGS_TXDONE);
 
                 lora_set_dio0_mapping(lora_args->handle, false);
                 lora_set_mode_rx_continuous(lora_args->handle);
-
-                gpio_blink_led();
             }
 
             if (flags & RFLR_IRQFLAGS_PAYLOADCRCERROR) {
