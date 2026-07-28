@@ -68,7 +68,8 @@ void uart_task(void *arg) {
 
         if (len == 0) continue;
 
-        Packet packet = packet_parse(data);
+        Packet packet;
+        if (!packet_parse(&packet, data, len)) continue;
 
         size_t bytes_written = packet_write_to_buf(&packet, send_data);
 

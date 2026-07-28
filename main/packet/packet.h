@@ -18,6 +18,6 @@ typedef struct {
 
 // Serialize into buf. Returns bytes written, or 0 if buf is too small.
 size_t packet_write_to_buf(Packet *packet, uint8_t *buf);
-Packet packet_parse(uint8_t* buf);
+bool packet_parse(Packet* packet, uint8_t* buf, uint8_t len);
 
 #endif // PACKET_H
